@@ -147,8 +147,8 @@
 </head>
 <body>
     <div id="toggleButton">☰ Show Controls</div>
-    <div id="controls">
-        <h3>3D Voronoi Controls</h3>
+            <div id="controls">
+            <h3 id="hideButton" style="cursor: pointer; user-select: none;">Hide</h3>
         
         <div class="control-group">
             <label>Number of Sites: <span class="value-display" id="numSitesValue">4000</span></label>
@@ -301,6 +301,14 @@
             controlsVisible = true;
             controls.classList.remove('hidden');
             toggleButton.classList.remove('visible');
+        });
+
+        // Hide button functionality
+        const hideButton = document.getElementById('hideButton');
+        hideButton.addEventListener('click', () => {
+            controlsVisible = false;
+            controls.classList.add('hidden');
+            toggleButton.classList.add('visible');
         });
 
         // Base color display update
