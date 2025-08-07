@@ -31,18 +31,25 @@ void main() {
         return;
     }
     
+    // Base position for each site
     vec3 basePos = vec3(
         hash33(vec3(float(siteId), 0, 0)).x,
         hash33(vec3(0, float(siteId), 0)).y,
         hash33(vec3(0, 0, float(siteId))).z
     );
     
+    // Scale base position to be within the cube
+    basePos = basePos * 0.8;
+    
+    // Animated movement with speed and scale control
     vec3 movement = noise3D_vec(basePos * 2.0 + vec3(iTime * movementSpeed));
     vec3 localPos = basePos + movement * movementScale;
     
+    // Soft boundary handling - repel from edges
     float edgeDist = 0.85;
     float repelStrength = 2.0;
     
+    // Apply soft boundaries for each axis
     if (abs(localPos.x) > edgeDist) {
         float excess = abs(localPos.x) - edgeDist;
         float repel = 1.0 - excess * repelStrength;
@@ -62,7 +69,9 @@ void main() {
         localPos.z *= repel;
     }
     
+    // Final safety clamp
     localPos = clamp(localPos, -0.95, 0.95);
+    
     fragColor = vec4(localPos, float(siteId));
 }
 `; 

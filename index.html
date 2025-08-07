@@ -22,6 +22,8 @@
             padding: 15px;
             border-radius: 5px;
             font-size: 12px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         
         #controls h3 { margin-top: 0; }
@@ -42,6 +44,19 @@
         input[type="checkbox"] {
             margin-left: 10px;
         }
+        
+        button {
+            margin-left: 10px;
+            padding: 2px 8px;
+        }
+        
+        #debug {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+            font-family: monospace;
+            font-size: 10px;
+        }
     </style>
 </head>
 <body>
@@ -49,21 +64,63 @@
         <h3>3D Voronoi Controls</h3>
         
         <div class="control-group">
+            <label>Auto Rotate:</label>
+            <input type="checkbox" id="autoRotate" checked>
+            <button id="resetRotation">Reset View</button>
+        </div>
+        
+        <div class="control-group">
+            <label>Cube Size:</label>
+            <input type="range" id="cubeSize" min="0.3" max="1.0" step="0.05" value="0.55">
+            <span id="cubeSizeValue">0.55</span>
+        </div>
+        
+        <div class="control-group">
             <label>Cell Opacity:</label>
-            <input type="range" id="cellOpacity" min="0" max="1" step="0.1" value="0.7">
-            <span id="cellOpacityValue">0.7</span>
+            <input type="range" id="cellOpacity" min="0" max="1" step="0.05" value="0.15">
+            <span id="cellOpacityValue">0.15</span>
+        </div>
+        
+        <div class="control-group">
+            <label>Edge Opacity:</label>
+            <input type="range" id="edgeOpacity" min="0" max="4" step="0.1" value="4.0">
+            <span id="edgeOpacityValue">4.0</span>
         </div>
         
         <div class="control-group">
             <label>Movement Speed:</label>
-            <input type="range" id="movementSpeed" min="0" max="1" step="0.1" value="0.3">
-            <span id="movementSpeedValue">0.3</span>
+            <input type="range" id="movementSpeed" min="0" max="1" step="0.1" value="0.6">
+            <span id="movementSpeedValue">0.6</span>
+        </div>
+        
+        <div class="control-group">
+            <label>Movement Scale:</label>
+            <input type="range" id="movementScale" min="0" max="0.5" step="0.05" value="0.2">
+            <span id="movementScaleValue">0.2</span>
         </div>
         
         <div class="control-group">
             <label>Edge Sharpness:</label>
-            <input type="range" id="edgeSharpness" min="0.001" max="0.05" step="0.001" value="0.01">
-            <span id="edgeSharpnessValue">0.01</span>
+            <input type="range" id="edgeSharpness" min="0.001" max="0.05" step="0.001" value="0.005">
+            <span id="edgeSharpnessValue">0.005</span>
+        </div>
+        
+        <div class="control-group">
+            <label>Edge Thickness:</label>
+            <input type="range" id="edgeThickness" min="0.001" max="0.02" step="0.001" value="0.00785">
+            <span id="edgeThicknessValue">0.00785</span>
+        </div>
+        
+        <div class="control-group">
+            <label>Site Point Size:</label>
+            <input type="range" id="sitePointSize" min="0" max="0.02" step="0.001" value="0.0075">
+            <span id="sitePointSizeValue">0.0075</span>
+        </div>
+        
+        <div class="control-group">
+            <label>Dither Scale:</label>
+            <input type="range" id="ditherScale" min="0.5" max="8" step="0.5" value="4.0">
+            <span id="ditherScaleValue">4.0</span>
         </div>
         
         <div class="control-group">
@@ -77,12 +134,22 @@
         </div>
         
         <div class="control-group">
+            <label>Temporal Dither:</label>
+            <input type="checkbox" id="temporalDither" checked>
+        </div>
+        
+        <div class="control-group">
             <label>Size-Based Color:</label>
-            <input type="checkbox" id="sizeBasedColor">
+            <input type="checkbox" id="sizeBasedColor" checked>
         </div>
         
         <div class="control-group">
             <label>Mouse: Drag to rotate</label>
+        </div>
+        
+        <div id="debug">
+            <div>Frame: <span id="frameCount">0</span></div>
+            <div>FPS: <span id="fps">0</span></div>
         </div>
     </div>
     

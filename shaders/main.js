@@ -24,13 +24,29 @@ uniform float sitePointSize;
 uniform float useSmoothEdges;
 uniform float useSizeBasedColor;
 uniform float useTemporalDither;
+uniform float ditherScale;
+uniform float cubeSize;
+uniform float autoRotate;
+uniform float rotateSpeed;
 uniform vec3 baseColor;
 
 in vec2 vUv;
 out vec4 fragColor;
 
-ivec4 getVoxelData(vec3 p) {
-    ivec3 c = ivec3(floor((p/CUBE_SIZE*0.5+0.5)*float(VOXEL_DIM)));
+// Custom dither with scale
+float bayerDither(vec2 pos, float scale) {
+    mat4 bayerMatrix = mat4(
+        0.0/16.0,  8.0/16.0,  2.0/16.0, 10.0/16.0,
+        12.0/16.0, 4.0/16.0, 14.0/16.0,  6.0/16.0,
+        3.0/16.0, 11.0/16.0,  1.0/16.0,  9.0/16.0,
+        15.0/16.0, 7.0/16.0, 13.0/16.0,  5.0/16.0
+    );
+    ivec2 p = ivec2(mod(pos * scale, 4.0));
+    return bayerMatrix[p.x][p.y];
+}
+
+ivec4 getVoxelData(vec3 p, float cs) {
+    ivec3 c = ivec3(floor((p/cs*0.5+0.5)*float(VOXEL_DIM)));
     return ivec4(texelFetch(iChannel1, to2D(clamp(c,0,VOXEL_DIM-1)), 0));
 }
 
@@ -109,27 +125,30 @@ void main() {
     vec2 fragCoord = gl_FragCoord.xy;
     vec3 backgroundColor = vec3(0.05, 0.05, 0.08);
     
-    // Get dither threshold with optional temporal rotation
+    // Get dither threshold with optional temporal rotation and scale
     float ditherThreshold;
     if (useTemporalDither > 0.5) {
         vec2 ditherOffset = vec2(
             mod(iFrame * 17.0, 64.0),
             mod(iFrame * 23.0, 64.0)
         );
-        ditherThreshold = bayer4x4(fragCoord + ditherOffset);
+        ditherThreshold = bayerDither(fragCoord + ditherOffset, ditherScale);
     } else {
-        ditherThreshold = bayer4x4(fragCoord);
+        ditherThreshold = bayerDither(fragCoord, ditherScale);
     }
     
     float hitDist = edgeSharpness * 0.1;
     
-    float angleH = iTime * AUTO_ROTATE_SPEED;
+    // Auto rotation or mouse control
+    float angleH = 0.0;
     float angleV = 0.0;
     
     if (iMouse.z > 0.0) {
         angleH = (iMouse.x / iResolution.x - 0.5) * 6.28318;
         angleV = (iMouse.y / iResolution.y - 0.5) * 3.14159;
         angleV = clamp(angleV, -1.4, 1.4);
+    } else if (autoRotate > 0.5) {
+        angleH = iTime * rotateSpeed;
     }
     
     float sh = sin(angleH), ch = cos(angleH);
@@ -148,8 +167,9 @@ void main() {
     vec3 ro = ro_world * invRot;
     vec3 rd = rd_world * invRot;
     
-    vec3 tMin = (vec3(-CUBE_SIZE) - ro) / rd;
-    vec3 tMax = (vec3(CUBE_SIZE) - ro) / rd;
+    // Use cubeSize uniform for dynamic sizing
+    vec3 tMin = (vec3(-cubeSize) - ro) / rd;
+    vec3 tMax = (vec3(cubeSize) - ro) / rd;
     vec3 t1 = min(tMin, tMax);
     vec3 t2 = max(tMin, tMax);
     float tNear = max(max(t1.x, t1.y), t1.z);
@@ -166,7 +186,7 @@ void main() {
     for(int i = 0; i < 80; i++) {
         vec3 p = ro + rd * t;
         
-        ivec4 nIds = getVoxelData(p);
+        ivec4 nIds = getVoxelData(p, cubeSize);
         int id1 = nIds.x;
         
         if(id1 < 0 || nIds.y < 0 || nIds.z < 0 || nIds.w < 0) {
@@ -179,6 +199,12 @@ void main() {
         vec3 p2 = getSiteData(iChannel0, nIds.y).xyz;
         vec3 p3 = getSiteData(iChannel0, nIds.z).xyz;
         vec3 p4 = getSiteData(iChannel0, nIds.w).xyz;
+        
+        // Scale site positions by cube size
+        p1 *= cubeSize / CUBE_SIZE;
+        p2 *= cubeSize / CUBE_SIZE;
+        p3 *= cubeSize / CUBE_SIZE;
+        p4 *= cubeSize / CUBE_SIZE;
         
         if (showSitePoints > 0.5) {
             if (distance(p, p1) < sitePointSize || distance(p, p2) < sitePointSize || 
@@ -221,7 +247,12 @@ void main() {
             
             vec3 surfaceColor = mix(cellColor, finalEdgeColor, edgeWeight);
             
-            float effectiveOpacity = mix(cellOpacity, edgeOpacity, edgeWeight);
+            // Handle edge opacity > 1.0 as intensity multiplier
+            float effectiveOpacity = mix(cellOpacity, min(1.0, edgeOpacity), edgeWeight);
+            if (edgeWeight > 0.5 && edgeOpacity > 1.0) {
+                // Make edges more visible when opacity > 1
+                effectiveOpacity = min(1.0, edgeWeight * edgeOpacity * 0.3);
+            }
             
             if (effectiveOpacity < ditherThreshold) {
                 t += minStep;
