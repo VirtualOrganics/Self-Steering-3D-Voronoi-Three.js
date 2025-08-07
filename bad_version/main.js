@@ -25,26 +25,12 @@ const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const clock = new THREE.Clock();
 let lastTime = 0;
 
-// Render targets for buffers - using float type for proper data storage
-const rtOptions = {
-    format: THREE.RGBAFormat,
-    type: THREE.FloatType,
-    minFilter: THREE.NearestFilter,
-    magFilter: THREE.NearestFilter,
-    wrapS: THREE.ClampToEdgeWrapping,
-    wrapT: THREE.ClampToEdgeWrapping,
-    generateMipmaps: false
-};
+// Current settings
+let currentNumSites = 100;
+let needsBufferReset = false;
 
-// Buffer A: Site positions (10x10 texture for 100 sites)
-const bufferA = new THREE.WebGLRenderTarget(10, 10, rtOptions);
-bufferA.texture.needsUpdate = true;
-
-// Buffer B: Voxel grid - we need TWO for ping-ponging to avoid feedback loop
-const bufferB1 = new THREE.WebGLRenderTarget(512, 512, rtOptions);
-const bufferB2 = new THREE.WebGLRenderTarget(512, 512, rtOptions);
-bufferB1.texture.needsUpdate = true;
-bufferB2.texture.needsUpdate = true;
+// Initialize buffers
+let bufferA, bufferB1, bufferB2;
 
 // Track which buffer B is current
 let currentBufferB = 0;
@@ -65,7 +51,7 @@ const bufferAMaterial = new THREE.ShaderMaterial({
         iFrame: { value: 0 },
         movementSpeed: { value: 0.6 },
         movementScale: { value: 0.2 },
-        numSites: { value: 100 }  // Added numSites uniform
+        numSites: { value: 100 }
     },
     vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferAFragment,
@@ -77,7 +63,7 @@ const bufferBMaterial = new THREE.ShaderMaterial({
         iChannel0: { value: null }, // Buffer A
         iChannel1: { value: null }, // Previous Buffer B
         iFrame: { value: 0 },
-        numSites: { value: 100 }  // Added numSites uniform
+        numSites: { value: 100 }
     },
     vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferBFragment,
@@ -93,25 +79,25 @@ const mainMaterial = new THREE.ShaderMaterial({
         iTime: { value: 0 },
         iFrame: { value: 0 },
         iMouse: { value: new THREE.Vector4(0, 0, 0, 0) },
-        numSites: { value: 100 },  // Added numSites uniform
         
-        // Control uniforms with Shadertoy defaults
-        cellOpacity: { value: 0.15 },
-        edgeOpacity: { value: 4.0 },
-        edgeSharpness: { value: 0.005 },
-        edgeThickness: { value: 0.00785 },
+        // Control uniforms with original working defaults
+        numSites: { value: 100 },
+        cellOpacity: { value: 0.15 },      // Original value for proper transparency
+        edgeOpacity: { value: 4.0 },       // Original value for white edges
+        edgeSharpness: { value: 0.005 },   // Original sharpness
+        edgeThickness: { value: 0.00785 }, // Original thickness
         showSitePoints: { value: 1.0 },
-        sitePointSize: { value: 0.0075 },
+        sitePointSize: { value: 0.0075 },  // Original size
         useSmoothEdges: { value: 1.0 },
-        useSizeBasedColor: { value: 1.0 },
+        useRandomColors: { value: 0.0 },
+        useSizeBasedTone: { value: 1.0 },
         useTemporalDither: { value: 1.0 },
         ditherScale: { value: 4.0 },
         cubeSize: { value: 0.55 },
         autoRotate: { value: 1.0 },
         rotateSpeed: { value: 0.3 },
-        baseColor: { value: new THREE.Vector3(0.224, 0.541, 0.953) },
-        useRandomColors: { value: 1.0 },  // Added for random colors toggle
-        zoom: { value: 2.5 }  // Added for zoom control
+        baseColor: { value: new THREE.Vector3(0.247, 0.541, 0.953) },
+        zoom: { value: 2.5 }
     },
     vertexShader: mainVertex,
     fragmentShader: commonShader + mainFragment,
@@ -147,12 +133,73 @@ const bufferBScene = new THREE.Scene();
 const bufferBQuad = new THREE.Mesh(geometry, bufferBMaterial);
 bufferBScene.add(bufferBQuad);
 
-// Mouse interaction
-let mouseDown = false;
-let mouseX = 0, mouseY = 0;
-let currentRotationX = 0;  // Persistent rotation angle horizontal
-let currentRotationY = 0;  // Persistent rotation angle vertical
-let isPaused = false;  // Animation pause state
+// Helper function to recreate buffers when site count changes
+function recreateBuffers(numSites) {
+    // Calculate texture size for Buffer A (sites)
+    const siteTexSize = Math.ceil(Math.sqrt(numSites));
+    
+    // Dispose old buffers
+    if (bufferA) {
+        bufferA.dispose();
+        bufferB1.dispose();
+        bufferB2.dispose();
+    }
+    
+    // Create new buffers with appropriate sizes
+    const rtOptions = {
+        format: THREE.RGBAFormat,
+        type: THREE.FloatType,
+        minFilter: THREE.NearestFilter,
+        magFilter: THREE.NearestFilter,
+        wrapS: THREE.ClampToEdgeWrapping,
+        wrapT: THREE.ClampToEdgeWrapping,
+        generateMipmaps: false
+    };
+    
+    bufferA = new THREE.WebGLRenderTarget(siteTexSize, siteTexSize, rtOptions);
+    bufferB1 = new THREE.WebGLRenderTarget(512, 512, rtOptions);
+    bufferB2 = new THREE.WebGLRenderTarget(512, 512, rtOptions);
+    
+    bufferAMaterial.uniforms.numSites.value = numSites;
+    bufferBMaterial.uniforms.numSites.value = numSites;
+    mainMaterial.uniforms.numSites.value = numSites;
+    
+    currentNumSites = numSites;
+    needsBufferReset = true;
+    
+    // Initialize the new buffers immediately
+    initializeBuffers();
+}
+
+// Function to initialize buffers
+function initializeBuffers() {
+    if (!bufferA || !bufferB1 || !bufferB2) return;
+    
+    // Initialize Buffer A
+    renderer.setRenderTarget(bufferA);
+    renderer.clear();
+    renderer.render(bufferAScene, orthoCamera);
+    
+    // Initialize both Buffer B ping-pong targets
+    // First render to bufferB1
+    bufferBMaterial.uniforms.iChannel0.value = bufferA.texture;
+    bufferBMaterial.uniforms.iChannel1.value = bufferB2.texture; // Initially empty
+    bufferBMaterial.uniforms.iFrame.value = 0;
+    
+    renderer.setRenderTarget(bufferB1);
+    renderer.clear();
+    renderer.render(bufferBScene, orthoCamera);
+    
+    // Then copy to bufferB2 for consistency
+    renderer.setRenderTarget(bufferB2);
+    renderer.clear();
+    renderer.render(bufferBScene, orthoCamera);
+    
+    renderer.setRenderTarget(null);
+}
+
+// Initialize buffers with default size
+recreateBuffers(100);
 
 // Touch handling for pinch-to-zoom
 let touches = [];
@@ -174,9 +221,9 @@ renderer.domElement.addEventListener('touchstart', (e) => {
         initialPinchDistance = getTouchDistance(touches[0], touches[1]);
     } else if (touches.length === 1) {
         // Start rotation
-        mouseX = touches[0].clientX;
-        mouseY = touches[0].clientY;
         mainMaterial.uniforms.iMouse.value.z = 1;
+        mainMaterial.uniforms.iMouse.value.x = touches[0].clientX;
+        mainMaterial.uniforms.iMouse.value.y = window.innerHeight - touches[0].clientY;
     }
 });
 
@@ -194,17 +241,9 @@ renderer.domElement.addEventListener('touchmove', (e) => {
         document.getElementById('zoom').value = newZoom;
         document.getElementById('zoomValue').textContent = newZoom.toFixed(1);
     } else if (touches.length === 1 && mainMaterial.uniforms.iMouse.value.z > 0) {
-        // Handle rotation with persistent angles
-        const deltaX = (touches[0].clientX - mouseX) * 0.01;
-        const deltaY = (touches[0].clientY - mouseY) * 0.01;
-        currentRotationX += deltaX;
-        currentRotationY = Math.max(-1.4, Math.min(1.4, currentRotationY + deltaY));
-        
-        mainMaterial.uniforms.iMouse.value.x = currentRotationX * 100 + window.innerWidth * 0.5;
-        mainMaterial.uniforms.iMouse.value.y = currentRotationY * 100 + window.innerHeight * 0.5;
-        
-        mouseX = touches[0].clientX;
-        mouseY = touches[0].clientY;
+        // Handle rotation
+        mainMaterial.uniforms.iMouse.value.x = touches[0].clientX;
+        mainMaterial.uniforms.iMouse.value.y = window.innerHeight - touches[0].clientY;
     }
 });
 
@@ -213,20 +252,22 @@ renderer.domElement.addEventListener('touchend', (e) => {
     touches = Array.from(e.touches);
     
     if (touches.length === 0) {
-        // End all gestures but keep rotation values
+        // End all gestures
         mainMaterial.uniforms.iMouse.value.z = 0;
-        mainMaterial.uniforms.iMouse.value.w = 1; // Signal to keep position
         currentZoom = mainMaterial.uniforms.zoom.value;
     } else if (touches.length === 1) {
         // Switching from pinch to rotate
-        mouseX = touches[0].clientX;
-        mouseY = touches[0].clientY;
         mainMaterial.uniforms.iMouse.value.z = 1;
+        mainMaterial.uniforms.iMouse.value.x = touches[0].clientX;
+        mainMaterial.uniforms.iMouse.value.y = window.innerHeight - touches[0].clientY;
         currentZoom = mainMaterial.uniforms.zoom.value;
     }
 });
 
-// Mouse events
+// Mouse interaction
+let mouseDown = false;
+let mouseX = 0, mouseY = 0;
+
 renderer.domElement.addEventListener('mousedown', (e) => {
     mouseDown = true;
     mouseX = e.clientX;
@@ -236,32 +277,20 @@ renderer.domElement.addEventListener('mousedown', (e) => {
 
 renderer.domElement.addEventListener('mousemove', (e) => {
     if (mouseDown) {
-        const deltaX = (e.clientX - mouseX) * 0.01;
-        const deltaY = (e.clientY - mouseY) * 0.01;
-        currentRotationX += deltaX;
-        currentRotationY = Math.max(-1.4, Math.min(1.4, currentRotationY + deltaY));
-        
-        // Convert rotation angles to pixel coordinates for shader
-        mainMaterial.uniforms.iMouse.value.x = currentRotationX * 100 + window.innerWidth * 0.5;
-        mainMaterial.uniforms.iMouse.value.y = currentRotationY * 100 + window.innerHeight * 0.5;
-        
-        mouseX = e.clientX;
-        mouseY = e.clientY;
+        mainMaterial.uniforms.iMouse.value.x = e.clientX;
+        mainMaterial.uniforms.iMouse.value.y = window.innerHeight - e.clientY;
     }
 });
 
 renderer.domElement.addEventListener('mouseup', () => {
     mouseDown = false;
-    // Keep rotation values but signal mouse released
     mainMaterial.uniforms.iMouse.value.z = 0;
-    mainMaterial.uniforms.iMouse.value.w = 1; // Signal to keep position
 });
 
 // Mouse wheel for zoom
 renderer.domElement.addEventListener('wheel', (e) => {
     e.preventDefault();
     const delta = e.deltaY * -0.001;
-    
     const newZoom = Math.max(1.0, Math.min(5.0, mainMaterial.uniforms.zoom.value + delta));
     mainMaterial.uniforms.zoom.value = newZoom;
     currentZoom = newZoom;
@@ -270,38 +299,76 @@ renderer.domElement.addEventListener('wheel', (e) => {
 });
 
 // Controls
-document.getElementById('autoRotate').addEventListener('change', (e) => {
-    mainMaterial.uniforms.autoRotate.value = e.target.checked ? 1.0 : 0.0;
-    if (!e.target.checked && mainMaterial.uniforms.iMouse.value.w > 0) {
-        // Keep current rotation when disabling auto-rotate
-        mainMaterial.uniforms.iMouse.value.x = currentRotationX * 100 + window.innerWidth * 0.5;
-        mainMaterial.uniforms.iMouse.value.y = currentRotationY * 100 + window.innerHeight * 0.5;
+document.getElementById('numSites').addEventListener('input', (e) => {
+    const numSites = parseInt(e.target.value);
+    document.getElementById('numSitesValue').textContent = numSites;
+    document.getElementById('numSitesInput').value = numSites;
+    if (numSites !== currentNumSites) {
+        recreateBuffers(numSites);
     }
 });
 
+// Add handler for number input
+document.getElementById('numSitesInput').addEventListener('change', (e) => {
+    const numSites = parseInt(e.target.value);
+    if (numSites >= 10 && numSites <= 50000) {
+        document.getElementById('numSitesValue').textContent = numSites;
+        // Update slider if within range
+        if (numSites <= 5000) {
+            document.getElementById('numSites').value = numSites;
+        }
+        if (numSites !== currentNumSites) {
+            console.log(`Changing number of sites to ${numSites}`);
+            recreateBuffers(numSites);
+        }
+    }
+});
+
+document.getElementById('autoRotate').addEventListener('change', (e) => {
+    mainMaterial.uniforms.autoRotate.value = e.target.checked ? 1.0 : 0.0;
+});
+
 document.getElementById('resetRotation').addEventListener('click', () => {
-    currentRotationX = 0;
-    currentRotationY = 0;
-    mainMaterial.uniforms.iMouse.value.set(window.innerWidth * 0.5, window.innerHeight * 0.5, 0, 0);
+    mainMaterial.uniforms.iMouse.value.set(0, 0, 0, 0);
 });
 
-// Pause button
-document.getElementById('pauseAnimation').addEventListener('click', (e) => {
-    isPaused = !isPaused;
-    e.target.textContent = isPaused ? 'Resume' : 'Pause';
-});
-
-// Zoom slider
 document.getElementById('zoom').addEventListener('input', (e) => {
-    const zoomValue = parseFloat(e.target.value);
-    mainMaterial.uniforms.zoom.value = zoomValue;
-    currentZoom = zoomValue;
-    document.getElementById('zoomValue').textContent = zoomValue.toFixed(1);
+    const zoom = parseFloat(e.target.value);
+    mainMaterial.uniforms.zoom.value = zoom;
+    currentZoom = zoom;
+    document.getElementById('zoomValue').textContent = zoom.toFixed(1);
 });
 
 document.getElementById('cubeSize').addEventListener('input', (e) => {
     mainMaterial.uniforms.cubeSize.value = parseFloat(e.target.value);
     document.getElementById('cubeSizeValue').textContent = e.target.value;
+});
+
+// Color controls
+document.getElementById('randomColors').addEventListener('change', (e) => {
+    const useRandom = e.target.checked;
+    mainMaterial.uniforms.useRandomColors.value = useRandom ? 1.0 : 0.0;
+    
+    // Enable/disable related controls
+    document.getElementById('baseColorPicker').disabled = useRandom;
+    document.getElementById('sizeBasedTone').disabled = useRandom;
+    document.getElementById('toneVariationGroup').style.opacity = useRandom ? '0.4' : '0.8';
+});
+
+document.getElementById('baseColorPicker').addEventListener('input', (e) => {
+    const color = e.target.value;
+    document.getElementById('baseColorValue').textContent = color;
+    
+    // Convert hex to RGB
+    const r = parseInt(color.substr(1, 2), 16) / 255;
+    const g = parseInt(color.substr(3, 2), 16) / 255;
+    const b = parseInt(color.substr(5, 2), 16) / 255;
+    
+    mainMaterial.uniforms.baseColor.value.set(r, g, b);
+});
+
+document.getElementById('sizeBasedTone').addEventListener('change', (e) => {
+    mainMaterial.uniforms.useSizeBasedTone.value = e.target.checked ? 1.0 : 0.0;
 });
 
 document.getElementById('cellOpacity').addEventListener('input', (e) => {
@@ -345,7 +412,12 @@ document.getElementById('ditherScale').addEventListener('input', (e) => {
 });
 
 document.getElementById('showSitePoints').addEventListener('change', (e) => {
-    mainMaterial.uniforms.showSitePoints.value = e.target.checked ? 1.0 : 0.0;
+    const show = e.target.checked;
+    mainMaterial.uniforms.showSitePoints.value = show ? 1.0 : 0.0;
+    
+    // Enable/disable size control
+    document.getElementById('sitePointSize').disabled = !show;
+    document.getElementById('sitePointSizeGroup').style.opacity = show ? '0.8' : '0.4';
 });
 
 document.getElementById('smoothEdges').addEventListener('change', (e) => {
@@ -354,37 +426,6 @@ document.getElementById('smoothEdges').addEventListener('change', (e) => {
 
 document.getElementById('temporalDither').addEventListener('change', (e) => {
     mainMaterial.uniforms.useTemporalDither.value = e.target.checked ? 1.0 : 0.0;
-});
-
-document.getElementById('sizeBasedColor').addEventListener('change', (e) => {
-    mainMaterial.uniforms.useSizeBasedColor.value = e.target.checked ? 1.0 : 0.0;
-});
-
-// Random colors toggle
-document.getElementById('randomColors').addEventListener('change', (e) => {
-    mainMaterial.uniforms.useRandomColors.value = e.target.checked ? 1.0 : 0.0;
-});
-
-// Base color picker
-document.getElementById('baseColor').addEventListener('input', (e) => {
-    const hex = e.target.value;
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    mainMaterial.uniforms.baseColor.value.set(r, g, b);
-});
-
-// Number of Sites control - just update uniform, no buffer resizing yet
-document.getElementById('numSites').addEventListener('input', (e) => {
-    const numSites = parseInt(e.target.value);
-    console.log('Updating numSites uniform to:', numSites);
-    
-    // Update uniforms
-    bufferAMaterial.uniforms.numSites.value = numSites;
-    bufferBMaterial.uniforms.numSites.value = numSites;
-    mainMaterial.uniforms.numSites.value = numSites;
-    
-    // Note: NOT resizing buffers yet - this would be the breaking point
 });
 
 // Window resize
@@ -399,20 +440,13 @@ window.addEventListener('resize', () => {
 let frame = 0;
 let frameCount = 0;
 let fpsTime = 0;
-let animationTime = 0;  // Time for animation (affected by pause)
-let lastAnimationTime = 0;
 
 function animate() {
     requestAnimationFrame(animate);
     
-    const currentTime = clock.getElapsedTime();
-    const deltaTime = currentTime - lastTime;
-    lastTime = currentTime;
-    
-    // Update animation time (only when not paused)
-    if (!isPaused) {
-        animationTime += deltaTime;
-    }
+    const time = clock.getElapsedTime();
+    const deltaTime = time - lastTime;
+    lastTime = time;
     
     // FPS calculation
     frameCount++;
@@ -424,8 +458,20 @@ function animate() {
     }
     document.getElementById('frameCount').textContent = frame;
     
-    // Update Buffer A (site positions) - use animationTime for movement
-    bufferAMaterial.uniforms.iTime.value = animationTime;
+    // Reset frame counter if buffers were recreated
+    if (needsBufferReset) {
+        frame = 0;
+        needsBufferReset = false;
+        currentBufferB = 0;
+    }
+    
+    // Make sure buffers exist before using them
+    if (!bufferA || !bufferB1 || !bufferB2) {
+        return;
+    }
+    
+    // Update Buffer A (site positions)
+    bufferAMaterial.uniforms.iTime.value = time;
     bufferAMaterial.uniforms.iFrame.value = frame;
     
     renderer.setRenderTarget(bufferA);
@@ -455,10 +501,9 @@ function animate() {
     }
     
     // Main render - use the buffer we just wrote to
-    // Use currentTime for rotation (not affected by pause)
     mainMaterial.uniforms.iChannel0.value = bufferA.texture;
     mainMaterial.uniforms.iChannel1.value = writeBuffer.texture;
-    mainMaterial.uniforms.iTime.value = currentTime;  // Use real time for rotation
+    mainMaterial.uniforms.iTime.value = time;
     mainMaterial.uniforms.iFrame.value = frame;
     
     renderer.setRenderTarget(null);
@@ -467,31 +512,6 @@ function animate() {
     
     frame++;
 }
-
-// Initialize buffers before starting animation
-console.log('Initializing buffers...');
-
-// Initialize Buffer A
-renderer.setRenderTarget(bufferA);
-renderer.clear();
-renderer.render(bufferAScene, orthoCamera);
-
-// Initialize both Buffer B ping-pong targets
-// First render to bufferB1
-bufferBMaterial.uniforms.iChannel0.value = bufferA.texture;
-bufferBMaterial.uniforms.iChannel1.value = bufferB2.texture; // Initially empty
-bufferBMaterial.uniforms.iFrame.value = 0;
-
-renderer.setRenderTarget(bufferB1);
-renderer.clear();
-renderer.render(bufferBScene, orthoCamera);
-
-// Then copy to bufferB2 for consistency
-renderer.setRenderTarget(bufferB2);
-renderer.clear();
-renderer.render(bufferBScene, orthoCamera);
-
-renderer.setRenderTarget(null);
 
 console.log('Starting animation loop...');
 animate(); 

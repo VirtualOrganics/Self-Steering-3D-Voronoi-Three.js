@@ -3,223 +3,335 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Voronoi Voxel Visualization</title>
+    <title>3D Voronoi with Voxel Acceleration</title>
     <style>
         body {
             margin: 0;
+            padding: 0;
             overflow: hidden;
-            font-family: sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background: #050508;
-            touch-action: none; /* Prevent default touch behaviors */
+            touch-action: none;
         }
-        canvas { display: block; }
-        
         #controls {
             position: absolute;
             top: 10px;
             left: 10px;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0, 0, 0, 0.85);
             color: white;
             padding: 15px;
-            border-radius: 5px;
+            border-radius: 10px;
             font-size: 12px;
+            max-width: 300px;
             max-height: 90vh;
             overflow-y: auto;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, opacity 0.3s ease;
             user-select: none;
         }
-        
-        #controls h3 { margin-top: 0; }
-        
+        #controls.hidden {
+            transform: translateX(-320px);
+            opacity: 0;
+        }
+        #controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #888888;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 8px;
+        }
         .control-group {
-            margin: 10px 0;
+            margin-bottom: 12px;
         }
-        
-        .control-group.sub-option {
-            margin-left: 20px;
-            opacity: 0.8;
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ddd;
+            font-weight: 500;
         }
-        
-        label {
-            display: inline-block;
-            width: 150px;
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 3px;
         }
-        
-        input[type="range"] {
-            width: 100px;
+        .control-group input[type="checkbox"] {
+            margin-right: 8px;
         }
-        
-        input[type="checkbox"] {
+        .control-group input[type="color"] {
+            width: 60px;
+            height: 25px;
             margin-left: 10px;
-        }
-        
-        input[type="color"] {
-            margin-left: 10px;
-            border: none;
-            background: none;
+            border: 1px solid #555;
+            border-radius: 3px;
             cursor: pointer;
-            width: 40px;
-            height: 20px;
         }
-        
-        button {
+        .control-group input[type="number"] {
+            width: 60px;
             margin-left: 10px;
-            padding: 2px 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #555;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
         }
-        
+        .value-display {
+            color: #888888;
+            font-weight: bold;
+            float: right;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .sub-option {
+            margin-left: 20px;
+            opacity: 0.9;
+        }
+        button {
+            background: #666666;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 5px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #777777;
+        }
+        button.small {
+            padding: 4px 10px;
+            margin-left: 10px;
+            font-size: 11px;
+        }
+        #debug {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #888888;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        #toggleButton {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            font-size: 12px;
+            transition: opacity 0.3s ease;
+            display: none;
+        }
+        #toggleButton.visible {
+            display: block;
+        }
+        #toggleButton:hover {
+            background: rgba(0, 0, 0, 0.95);
+        }
         .section-divider {
             margin: 15px 0;
             padding-top: 10px;
-            border-top: 1px solid #444;
-        }
-        
-        #debug {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #444;
-            font-family: monospace;
-            font-size: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
         }
     </style>
 </head>
 <body>
+    <div id="toggleButton">☰ Show Controls</div>
     <div id="controls">
         <h3>3D Voronoi Controls</h3>
         
-        <!-- Core Settings -->
         <div class="control-group">
-            <label>Number of Sites:</label>
+            <label>Number of Sites: <span class="value-display" id="numSitesValue">100</span></label>
             <input type="range" id="numSites" min="10" max="500" step="10" value="100">
-            <span id="numSitesValue">100</span>
+            <input type="number" id="numSitesInput" min="10" max="500" value="100">
         </div>
-        
+
         <div class="control-group">
-            <label>Cube Size:</label>
-            <input type="range" id="cubeSize" min="0.3" max="1.0" step="0.05" value="0.55">
-            <span id="cubeSizeValue">0.55</span>
+            <label>Cube Size: <span class="value-display" id="cubeSizeValue">0.55</span></label>
+            <input type="range" id="cubeSize" min="0.3" max="1.0" step="0.01" value="0.55">
         </div>
-        
+
         <!-- Rotation/Navigation -->
         <div class="section-divider">
             <div class="control-group">
-                <label>Auto Rotate:</label>
-                <input type="checkbox" id="autoRotate" checked>
-                <button id="resetRotation">Reset View</button>
+                <label>
+                    <input type="checkbox" id="autoRotate" checked>
+                    Auto Rotate
+                </label>
+                <button id="resetRotation" class="small">Reset View</button>
+                <button id="pauseAnimation" class="small">Pause</button>
             </div>
-            
+
             <div class="control-group">
-                <label>Zoom:</label>
+                <label>Zoom: <span class="value-display" id="zoomValue">2.5</span></label>
                 <input type="range" id="zoom" min="1.0" max="5.0" step="0.1" value="2.5">
-                <span id="zoomValue">2.5</span>
             </div>
         </div>
-        
+
         <!-- Color Settings -->
         <div class="section-divider">
             <div class="control-group">
-                <label>Random Colors:</label>
-                <input type="checkbox" id="randomColors">
+                <label>Random Colors:
+                    <input type="checkbox" id="randomColors" style="margin-left: 10px;">
+                </label>
             </div>
             
             <div class="control-group">
-                <label>Base Color:</label>
-                <input type="color" id="baseColorPicker" value="#3F8AF3">
-                <span id="baseColorValue">#3F8AF3</span>
+                <label style="display: inline;">Base Color:
+                    <input type="color" id="baseColor" value="#3f8af3">
+                    <span id="baseColorValue" style="margin-left: 10px; color: #888;">#3F8AF3</span>
+                </label>
             </div>
             
-            <div class="control-group sub-option" id="toneVariationGroup">
-                <label>Size-Based Tone:</label>
-                <input type="checkbox" id="sizeBasedTone" checked>
-            </div>
-        </div>
-        
-        <!-- Transparency Settings -->
-        <div class="section-divider">
-            <div class="control-group">
-                <label>Cell Opacity:</label>
-                <input type="range" id="cellOpacity" min="0" max="1" step="0.05" value="0.15">
-                <span id="cellOpacityValue">0.15</span>
-            </div>
-            
-            <div class="control-group">
-                <label>Edge Opacity:</label>
-                <input type="range" id="edgeOpacity" min="0" max="4" step="0.1" value="4.0">
-                <span id="edgeOpacityValue">4.0</span>
-            </div>
-            
-            <div class="control-group">
-                <label>Dither Scale:</label>
-                <input type="range" id="ditherScale" min="0.5" max="8" step="0.5" value="4.0">
-                <span id="ditherScaleValue">4.0</span>
-            </div>
-            
-            <div class="control-group">
-                <label>Temporal Dither:</label>
-                <input type="checkbox" id="temporalDither" checked>
-            </div>
-        </div>
-        
-        <!-- Movement Settings -->
-        <div class="section-divider">
-            <div class="control-group">
-                <label>Movement Speed:</label>
-                <input type="range" id="movementSpeed" min="0" max="1" step="0.1" value="0.6">
-                <span id="movementSpeedValue">0.6</span>
-            </div>
-            
-            <div class="control-group">
-                <label>Movement Scale:</label>
-                <input type="range" id="movementScale" min="0" max="0.5" step="0.05" value="0.2">
-                <span id="movementScaleValue">0.2</span>
-            </div>
-        </div>
-        
-        <!-- Edge/Point Settings -->
-        <div class="section-divider">
-            <div class="control-group">
-                <label>Edge Sharpness:</label>
-                <input type="range" id="edgeSharpness" min="0.001" max="0.05" step="0.001" value="0.005">
-                <span id="edgeSharpnessValue">0.005</span>
-            </div>
-            
-            <div class="control-group">
-                <label>Edge Thickness:</label>
-                <input type="range" id="edgeThickness" min="0.001" max="0.02" step="0.001" value="0.00785">
-                <span id="edgeThicknessValue">0.00785</span>
-            </div>
-            
-            <div class="control-group">
-                <label>Smooth Edges:</label>
-                <input type="checkbox" id="smoothEdges" checked>
-            </div>
-            
-            <div class="control-group">
-                <label>Show Site Points:</label>
-                <input type="checkbox" id="showSitePoints" checked>
-            </div>
-            
-            <div class="control-group sub-option" id="sitePointSizeGroup">
-                <label>Site Point Size:</label>
-                <input type="range" id="sitePointSize" min="0" max="0.02" step="0.001" value="0.0075">
-                <span id="sitePointSizeValue">0.0075</span>
-            </div>
-        </div>
-        
-        <!-- Info -->
-        <div class="section-divider">
-            <div class="control-group">
-                <label style="width: auto">
-                    Mouse: Drag to rotate<br>
-                    Touch: Pinch to zoom
+            <div class="control-group sub-option">
+                <label>
+                    <input type="checkbox" id="sizeBasedColor" checked>
+                    Size-Based Tone
                 </label>
             </div>
         </div>
-        
-        <div id="debug">
-            <div>Frame: <span id="frameCount">0</span></div>
-            <div>FPS: <span id="fps">0</span></div>
+
+        <!-- Visual Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Cell Opacity: <span class="value-display" id="cellOpacityValue">0.15</span></label>
+                <input type="range" id="cellOpacity" min="0.0" max="1.0" step="0.01" value="0.15">
+            </div>
+
+            <div class="control-group">
+                <label>Edge Opacity: <span class="value-display" id="edgeOpacityValue">4.0</span></label>
+                <input type="range" id="edgeOpacity" min="0.0" max="10.0" step="0.1" value="4.0">
+            </div>
+
+            <div class="control-group">
+                <label>Edge Sharpness: <span class="value-display" id="edgeSharpnessValue">0.005</span></label>
+                <input type="range" id="edgeSharpness" min="0.001" max="0.05" step="0.001" value="0.005">
+            </div>
+
+            <div class="control-group">
+                <label>Edge Thickness: <span class="value-display" id="edgeThicknessValue">0.00785</span></label>
+                <input type="range" id="edgeThickness" min="0.001" max="0.02" step="0.00001" value="0.00785">
+            </div>
+
+            <div class="control-group">
+                <label>Transparency Dither: <span class="value-display" id="ditherScaleValue">4.0</span></label>
+                <input type="range" id="ditherScale" min="1.0" max="16.0" step="0.1" value="4.0">
+            </div>
+        </div>
+
+        <!-- Movement Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Movement Speed: <span class="value-display" id="movementSpeedValue">0.6</span></label>
+                <input type="range" id="movementSpeed" min="0.0" max="2.0" step="0.01" value="0.6">
+            </div>
+
+            <div class="control-group">
+                <label>Movement Scale: <span class="value-display" id="movementScaleValue">0.2</span></label>
+                <input type="range" id="movementScale" min="0.0" max="1.0" step="0.01" value="0.2">
+            </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Site Point Size: <span class="value-display" id="sitePointSizeValue">0.0075</span></label>
+                <input type="range" id="sitePointSize" min="0.0" max="0.02" step="0.0001" value="0.0075">
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="showSitePoints" checked>
+                    Show Site Points
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="smoothEdges" checked>
+                    Smooth Edges
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="temporalDither" checked>
+                    Temporal Dithering
+                </label>
+            </div>
         </div>
     </div>
-    
-    <script type="module" src="/main.js"></script>
+
+    <div id="debug">
+        FPS: <span id="fps">0</span> | Frame: <span id="frameCount">0</span>
+    </div>
+
+    <script type="module" src="main.js"></script>
+    <script>
+        // Toggle controls visibility with H key
+        let controlsVisible = true;
+        const controls = document.getElementById('controls');
+        const toggleButton = document.getElementById('toggleButton');
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'h' || e.key === 'H') {
+                controlsVisible = !controlsVisible;
+                if (controlsVisible) {
+                    controls.classList.remove('hidden');
+                    toggleButton.classList.remove('visible');
+                } else {
+                    controls.classList.add('hidden');
+                    toggleButton.classList.add('visible');
+                }
+            }
+        });
+        
+        // Toggle button functionality
+        toggleButton.addEventListener('click', () => {
+            controlsVisible = true;
+            controls.classList.remove('hidden');
+            toggleButton.classList.remove('visible');
+        });
+
+        // Number of Sites controls sync
+        const numSitesSlider = document.getElementById('numSites');
+        const numSitesInput = document.getElementById('numSitesInput');
+        const numSitesValue = document.getElementById('numSitesValue');
+        
+        numSitesSlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            numSitesInput.value = value;
+            numSitesValue.textContent = value;
+            // Not implementing actual buffer recreation yet - just UI sync
+            console.log('Number of sites would change to:', value);
+        });
+        
+        numSitesInput.addEventListener('change', (e) => {
+            const value = Math.min(500, Math.max(10, parseInt(e.target.value) || 100));
+            e.target.value = value;
+            numSitesSlider.value = value;
+            numSitesValue.textContent = value;
+            // Not implementing actual buffer recreation yet - just UI sync
+            console.log('Number of sites would change to:', value);
+        });
+
+        // Base color display update
+        const baseColorInput = document.getElementById('baseColor');
+        const baseColorValue = document.getElementById('baseColorValue');
+        
+        baseColorInput.addEventListener('input', (e) => {
+            baseColorValue.textContent = e.target.value.toUpperCase();
+        });
+    </script>
 </body>
 </html> 

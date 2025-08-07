@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Voronoi Voxel Visualization</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: sans-serif;
+            background: #050508;
+            touch-action: none; /* Prevent default touch behaviors */
+        }
+        canvas { display: block; }
+        
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-height: 90vh;
+            overflow-y: auto;
+            user-select: none;
+            transition: transform 0.3s ease;
+        }
+        
+        #controls.hidden {
+            transform: translateX(-100%);
+        }
+        
+        #toggleControls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: 1px solid #555;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 1000;
+            transition: left 0.3s ease;
+        }
+        
+        #toggleControls.shifted {
+            left: 280px;
+        }
+        
+        #toggleControls:hover {
+            background: rgba(0,0,0,0.9);
+            border-color: #888;
+        }
+        
+        #controls h3 { margin-top: 0; }
+        
+        .control-group {
+            margin: 10px 0;
+        }
+        
+        .control-group.sub-option {
+            margin-left: 20px;
+            opacity: 0.8;
+        }
+        
+        label {
+            display: inline-block;
+            width: 150px;
+        }
+        
+        input[type="range"] {
+            width: 100px;
+        }
+        
+        input[type="checkbox"] {
+            margin-left: 10px;
+        }
+        
+        input[type="color"] {
+            margin-left: 10px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            width: 40px;
+            height: 20px;
+        }
+        
+        input[type="number"] {
+            width: 70px;
+            padding: 2px 4px;
+            margin-left: 5px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid #555;
+            border-radius: 3px;
+        }
+        
+        button {
+            margin-left: 10px;
+            padding: 2px 8px;
+        }
+        
+        .section-divider {
+            margin: 15px 0;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+        }
+        
+        #debug {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #444;
+            font-family: monospace;
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <button id="toggleControls" class="shifted">☰ Hide Controls</button>
+    
+    <div id="controls">
+        <h3>3D Voronoi Controls</h3>
+        
+        <!-- Core Settings -->
+        <div class="control-group">
+            <label>Number of Sites:</label>
+            <input type="range" id="numSites" min="10" max="5000" step="10" value="100">
+            <span id="numSitesValue">100</span>
+            <input type="number" id="numSitesInput" min="10" max="50000" value="100">
+        </div>
+        
+        <div class="control-group">
+            <label>Cube Size:</label>
+            <input type="range" id="cubeSize" min="0.3" max="1.0" step="0.05" value="0.55">
+            <span id="cubeSizeValue">0.55</span>
+        </div>
+        
+        <!-- Rotation/Navigation -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Auto Rotate:</label>
+                <input type="checkbox" id="autoRotate" checked>
+                <button id="resetRotation">Reset View</button>
+            </div>
+            
+            <div class="control-group">
+                <label>Zoom:</label>
+                <input type="range" id="zoom" min="1.0" max="5.0" step="0.1" value="2.5">
+                <span id="zoomValue">2.5</span>
+            </div>
+        </div>
+        
+        <!-- Color Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Random Colors:</label>
+                <input type="checkbox" id="randomColors">
+            </div>
+            
+            <div class="control-group">
+                <label>Base Color:</label>
+                <input type="color" id="baseColorPicker" value="#3F8AF3">
+                <span id="baseColorValue">#3F8AF3</span>
+            </div>
+            
+            <div class="control-group sub-option" id="toneVariationGroup">
+                <label>Size-Based Tone:</label>
+                <input type="checkbox" id="sizeBasedTone" checked>
+            </div>
+        </div>
+        
+        <!-- Transparency Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Cell Opacity:</label>
+                <input type="range" id="cellOpacity" min="0" max="1" step="0.05" value="0.15">
+                <span id="cellOpacityValue">0.15</span>
+            </div>
+            
+            <div class="control-group">
+                <label>Edge Opacity:</label>
+                <input type="range" id="edgeOpacity" min="0" max="4" step="0.1" value="4.0">
+                <span id="edgeOpacityValue">4.0</span>
+            </div>
+            
+            <div class="control-group">
+                <label>Dither Scale:</label>
+                <input type="range" id="ditherScale" min="0.5" max="8" step="0.5" value="1.0">
+                <span id="ditherScaleValue">1.0</span>
+            </div>
+            
+            <div class="control-group">
+                <label>Temporal Dither:</label>
+                <input type="checkbox" id="temporalDither" checked>
+            </div>
+        </div>
+        
+        <!-- Movement Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Movement Speed:</label>
+                <input type="range" id="movementSpeed" min="0" max="1" step="0.1" value="0.6">
+                <span id="movementSpeedValue">0.6</span>
+            </div>
+            
+            <div class="control-group">
+                <label>Movement Scale:</label>
+                <input type="range" id="movementScale" min="0" max="0.5" step="0.05" value="0.2">
+                <span id="movementScaleValue">0.2</span>
+            </div>
+        </div>
+        
+        <!-- Edge/Point Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Edge Sharpness:</label>
+                <input type="range" id="edgeSharpness" min="0.001" max="0.05" step="0.001" value="0.005">
+                <span id="edgeSharpnessValue">0.005</span>
+            </div>
+            
+            <div class="control-group">
+                <label>Edge Thickness:</label>
+                <input type="range" id="edgeThickness" min="0.001" max="0.02" step="0.001" value="0.00785">
+                <span id="edgeThicknessValue">0.00785</span>
+            </div>
+            
+            <div class="control-group">
+                <label>Smooth Edges:</label>
+                <input type="checkbox" id="smoothEdges" checked>
+            </div>
+            
+            <div class="control-group">
+                <label>Show Site Points:</label>
+                <input type="checkbox" id="showSitePoints" checked>
+            </div>
+            
+            <div class="control-group sub-option" id="sitePointSizeGroup">
+                <label>Site Point Size:</label>
+                <input type="range" id="sitePointSize" min="0" max="0.02" step="0.001" value="0.0075">
+                <span id="sitePointSizeValue">0.0075</span>
+            </div>
+        </div>
+        
+        <!-- Info -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label style="width: auto">
+                    Mouse: Drag to rotate<br>
+                    Touch: Pinch to zoom<br>
+                    Keyboard: Press H to toggle
+                </label>
+            </div>
+        </div>
+        
+        <div id="debug">
+            <div>Frame: <span id="frameCount">0</span></div>
+            <div>FPS: <span id="fps">0</span></div>
+        </div>
+    </div>
+    
+    <script>
+        // Toggle control panel visibility
+        const toggleBtn = document.getElementById('toggleControls');
+        const controls = document.getElementById('controls');
+        let controlsVisible = true;
+        
+        toggleBtn.addEventListener('click', () => {
+            controlsVisible = !controlsVisible;
+            if (controlsVisible) {
+                controls.classList.remove('hidden');
+                toggleBtn.classList.add('shifted');
+                toggleBtn.textContent = '☰ Hide Controls';
+            } else {
+                controls.classList.add('hidden');
+                toggleBtn.classList.remove('shifted');
+                toggleBtn.textContent = '☰ Show Controls';
+            }
+        });
+        
+        // Keyboard shortcut
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'h') {
+                toggleBtn.click();
+            }
+        });
+        
+        // Sync slider and number input for sites
+        const numSitesSlider = document.getElementById('numSites');
+        const numSitesInput = document.getElementById('numSitesInput');
+        const numSitesValue = document.getElementById('numSitesValue');
+        
+        numSitesInput.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            if (value >= 10 && value <= 50000) {
+                numSitesValue.textContent = value;
+                // Update slider if within range
+                if (value <= 5000) {
+                    numSitesSlider.value = value;
+                }
+                // Dispatch change event to trigger the main.js handler
+                const event = new Event('change');
+                numSitesInput.dispatchEvent(event);
+            }
+        });
+        
+        numSitesSlider.addEventListener('input', (e) => {
+            const value = e.target.value;
+            numSitesInput.value = value;
+            numSitesValue.textContent = value;
+        });
+    </script>
+    
+    <script type="module" src="/main.js"></script>
+</body>
+</html> 

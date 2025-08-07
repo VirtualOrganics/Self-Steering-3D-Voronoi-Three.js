@@ -8,18 +8,14 @@ void main() {
 `;
 
 export const mainFragment = `
-// Main renderer: Raymarching through voxel grid with dithered transparency
-precision highp float;
-
-uniform sampler2D iChannel0;  // Buffer A (site positions)
-uniform sampler2D iChannel1;  // Buffer B (voxel grid)
+uniform sampler2D iChannel0;
+uniform sampler2D iChannel1;
 uniform vec2 iResolution;
 uniform float iTime;
 uniform float iFrame;
 uniform vec4 iMouse;
-uniform float numSites;  // Added for dynamic site count
 
-// Control uniforms
+uniform float numSites;
 uniform float cellOpacity;
 uniform float edgeOpacity;
 uniform float edgeSharpness;
@@ -27,15 +23,15 @@ uniform float edgeThickness;
 uniform float showSitePoints;
 uniform float sitePointSize;
 uniform float useSmoothEdges;
-uniform float useSizeBasedColor;
+uniform float useRandomColors;
+uniform float useSizeBasedTone;
 uniform float useTemporalDither;
 uniform float ditherScale;
 uniform float cubeSize;
 uniform float autoRotate;
 uniform float rotateSpeed;
 uniform vec3 baseColor;
-uniform float useRandomColors;  // Added for random colors toggle
-uniform float zoom;  // Added for zoom control
+uniform float zoom;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -48,7 +44,8 @@ float bayerDither(vec2 pos, float scale) {
         3.0/16.0, 11.0/16.0,  1.0/16.0,  9.0/16.0,
         15.0/16.0, 7.0/16.0, 13.0/16.0,  5.0/16.0
     );
-    ivec2 p = ivec2(mod(pos * scale, 4.0));
+    // Scale of 1.0 = normal 4x4 pattern, higher values = finer pattern
+    ivec2 p = ivec2(mod(pos / max(scale, 0.5), 4.0));
     return bayerMatrix[p.x][p.y];
 }
 
@@ -65,38 +62,37 @@ float getCellSize(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
     return clamp((avgDist - 0.1) / 0.4, 0.0, 1.0);
 }
 
-// Improved color generation with saturation boost
-vec3 idToColor(int id) {
-    if (useSizeBasedColor > 0.5) {
-        // Use base color with size-based variation based on id
-        float variation = fract(float(id) * 0.618);
-        float tone = 0.5 + 0.5 * variation;
-        return baseColor * tone;
-    } else if (useRandomColors > 0.5) {
-        // Use random colors per cell
-        vec3 col = vec3(
-            fract(sin(float(id) * 12.9898) * 43758.5453),
-            fract(sin(float(id) * 78.233) * 43758.5453),
-            fract(sin(float(id) * 45.164) * 43758.5453)
-        );
-        
-        // Boost saturation
-        float maxComp = max(col.r, max(col.g, col.b));
-        float minComp = min(col.r, min(col.g, col.b));
-        float sat = maxComp - minComp;
-        
-        if (sat < 0.3) {
-            col = mix(vec3(0.5), col, 2.0);
-        }
-        
-        col = pow(col, vec3(0.8));
-        col = col * 0.8 + 0.2;
-        
-        return col;
+vec3 idToColor(int id, vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
+    if (useRandomColors > 0.5) {
+        // Random colors based on site ID
+        float h = fract(float(id) * 0.618);
+        vec3 color = 0.5 + 0.5 * cos(6.28318 * (h + vec3(0.0, 0.33, 0.67)));
+        float lum = dot(color, vec3(0.299, 0.587, 0.114));
+        color = mix(vec3(lum), color, 1.8);
+        color = max(color, vec3(0.15));
+        return color;
     } else {
-        // Use single base color for all cells
-        return baseColor;
+        // Single base color, optionally with size-based tone variation
+        if (useSizeBasedTone > 0.5) {
+            float cellSize = getCellSize(p, p1, p2, p3, p4);
+            float brightness = 0.5 + (1.0 - cellSize) * 0.7;
+            vec3 color = baseColor * brightness;
+            float variation = fract(float(id) * 0.618) * 0.1 - 0.05;
+            color += vec3(variation);
+            return clamp(color, vec3(0.0), vec3(1.0));
+        } else {
+            // Solid uniform color
+            return baseColor;
+        }
     }
+}
+
+vec4 getSiteDataFromBuffer(int siteId) {
+    if (siteId < 0 || siteId >= int(numSites)) return vec4(0);
+    int texSize = int(ceil(sqrt(numSites)));
+    int tx = siteId % texSize;
+    int ty = siteId / texSize;
+    return texelFetch(iChannel0, ivec2(tx, ty), 0);
 }
 
 float map(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
@@ -166,13 +162,11 @@ void main() {
     float angleH = 0.0;
     float angleV = 0.0;
     
-    if (iMouse.z > 0.0 || iMouse.w > 0.0) {
-        // Mouse control or maintaining last position
+    if (iMouse.z > 0.0) {
         angleH = (iMouse.x / iResolution.x - 0.5) * 6.28318;
         angleV = (iMouse.y / iResolution.y - 0.5) * 3.14159;
         angleV = clamp(angleV, -1.4, 1.4);
     } else if (autoRotate > 0.5) {
-        // Auto rotate only when not manually positioned
         angleH = iTime * rotateSpeed;
     }
     
@@ -185,7 +179,7 @@ void main() {
     mat3 rot = rotX * rotY;
     mat3 invRot = transpose(rot);
     
-    vec3 ro_world = vec3(0.0, 0.0, zoom);  // Use zoom uniform instead of hardcoded 2.5
+    vec3 ro_world = vec3(0.0, 0.0, zoom);
     vec2 uv = (fragCoord - 0.5 * iResolution) / iResolution.y;
     vec3 rd_world = normalize(vec3(uv, -1.5));
     
@@ -220,10 +214,10 @@ void main() {
             continue;
         }
         
-        vec3 p1 = getSiteData(iChannel0, id1).xyz;
-        vec3 p2 = getSiteData(iChannel0, nIds.y).xyz;
-        vec3 p3 = getSiteData(iChannel0, nIds.z).xyz;
-        vec3 p4 = getSiteData(iChannel0, nIds.w).xyz;
+        vec3 p1 = getSiteDataFromBuffer(id1).xyz;
+        vec3 p2 = getSiteDataFromBuffer(nIds.y).xyz;
+        vec3 p3 = getSiteDataFromBuffer(nIds.z).xyz;
+        vec3 p4 = getSiteDataFromBuffer(nIds.w).xyz;
         
         // Scale site positions by cube size
         p1 *= cubeSize / CUBE_SIZE;
@@ -249,7 +243,7 @@ void main() {
             
             float edgeWeight = getEdgeWeight(p, p1, p2, p3, p4);
             
-            vec3 color = idToColor(id1);
+            vec3 color = idToColor(id1, p, p1, p2, p3, p4);
             
             vec3 lightDir1 = normalize(vec3(0.8, 0.9, 0.6));
             vec3 lightDir2 = normalize(vec3(-0.5, 0.3, -0.8));
@@ -279,7 +273,8 @@ void main() {
                 effectiveOpacity = min(1.0, edgeWeight * edgeOpacity * 0.3);
             }
             
-            if (effectiveOpacity < ditherThreshold) {
+            // FIXED: Dithering comparison - skip pixel if random threshold is greater than opacity
+            if (ditherThreshold > effectiveOpacity) {
                 t += minStep;
                 if(t > tFar) break;
                 continue;
