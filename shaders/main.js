@@ -15,6 +15,7 @@ uniform float iTime;
 uniform float iFrame;
 uniform vec4 iMouse;
 
+uniform float numSites;
 uniform float cellOpacity;
 uniform float edgeOpacity;
 uniform float edgeSharpness;
@@ -22,13 +23,15 @@ uniform float edgeThickness;
 uniform float showSitePoints;
 uniform float sitePointSize;
 uniform float useSmoothEdges;
-uniform float useSizeBasedColor;
+uniform float useRandomColors;
+uniform float useSizeBasedTone;
 uniform float useTemporalDither;
 uniform float ditherScale;
 uniform float cubeSize;
 uniform float autoRotate;
 uniform float rotateSpeed;
 uniform vec3 baseColor;
+uniform float zoom;
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -59,21 +62,36 @@ float getCellSize(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
 }
 
 vec3 idToColor(int id, vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
-    if (useSizeBasedColor > 0.5) {
-        float cellSize = getCellSize(p, p1, p2, p3, p4);
-        float brightness = 0.5 + (1.0 - cellSize) * 0.7;
-        vec3 color = baseColor * brightness;
-        float variation = fract(float(id) * 0.618) * 0.1 - 0.05;
-        color += vec3(variation);
-        return clamp(color, vec3(0.0), vec3(1.0));
-    } else {
+    if (useRandomColors > 0.5) {
+        // Random colors based on site ID
         float h = fract(float(id) * 0.618);
         vec3 color = 0.5 + 0.5 * cos(6.28318 * (h + vec3(0.0, 0.33, 0.67)));
         float lum = dot(color, vec3(0.299, 0.587, 0.114));
         color = mix(vec3(lum), color, 1.8);
         color = max(color, vec3(0.15));
         return color;
+    } else {
+        // Single base color, optionally with size-based tone variation
+        if (useSizeBasedTone > 0.5) {
+            float cellSize = getCellSize(p, p1, p2, p3, p4);
+            float brightness = 0.5 + (1.0 - cellSize) * 0.7;
+            vec3 color = baseColor * brightness;
+            float variation = fract(float(id) * 0.618) * 0.1 - 0.05;
+            color += vec3(variation);
+            return clamp(color, vec3(0.0), vec3(1.0));
+        } else {
+            // Solid uniform color
+            return baseColor;
+        }
     }
+}
+
+vec4 getSiteDataFromBuffer(int siteId) {
+    if (siteId < 0 || siteId >= int(numSites)) return vec4(0);
+    int texSize = int(ceil(sqrt(numSites)));
+    int tx = siteId % texSize;
+    int ty = siteId / texSize;
+    return texelFetch(iChannel0, ivec2(tx, ty), 0);
 }
 
 float map(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
@@ -160,7 +178,7 @@ void main() {
     mat3 rot = rotX * rotY;
     mat3 invRot = transpose(rot);
     
-    vec3 ro_world = vec3(0.0, 0.0, 2.5);
+    vec3 ro_world = vec3(0.0, 0.0, zoom);
     vec2 uv = (fragCoord - 0.5 * iResolution) / iResolution.y;
     vec3 rd_world = normalize(vec3(uv, -1.5));
     
@@ -195,10 +213,10 @@ void main() {
             continue;
         }
         
-        vec3 p1 = getSiteData(iChannel0, id1).xyz;
-        vec3 p2 = getSiteData(iChannel0, nIds.y).xyz;
-        vec3 p3 = getSiteData(iChannel0, nIds.z).xyz;
-        vec3 p4 = getSiteData(iChannel0, nIds.w).xyz;
+        vec3 p1 = getSiteDataFromBuffer(id1).xyz;
+        vec3 p2 = getSiteDataFromBuffer(nIds.y).xyz;
+        vec3 p3 = getSiteDataFromBuffer(nIds.z).xyz;
+        vec3 p4 = getSiteDataFromBuffer(nIds.w).xyz;
         
         // Scale site positions by cube size
         p1 *= cubeSize / CUBE_SIZE;

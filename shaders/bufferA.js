@@ -3,6 +3,7 @@ uniform float iTime;
 uniform float iFrame;
 uniform float movementSpeed;
 uniform float movementScale;
+uniform float numSites;
 
 out vec4 fragColor;
 
@@ -25,8 +26,10 @@ vec3 noise3D_vec(vec3 p) {
 
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
-    int siteId = p.y * 10 + p.x;
-    if (siteId >= MAX_SITES) {
+    int texSize = int(ceil(sqrt(numSites)));
+    int siteId = p.y * texSize + p.x;
+    
+    if (siteId >= int(numSites)) {
         fragColor = vec4(0);
         return;
     }

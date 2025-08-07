@@ -1,33 +1,41 @@
 export const commonShader = `
-#define MAX_SITES 100
-#define CUBE_SIZE 0.6
-#define AUTO_ROTATE_SPEED 0.5
+// Core configuration
+#define CUBE_SIZE 0.55
 
+// Voxel Grid configuration
 const int VOXEL_DIM = 64;
 const int SLICES_PER_ROW = 8;
 
-vec4 getSiteData(sampler2D siteSampler, int id) {
-    if (id < 0) return vec4(1e6, 1e6, 1e6, -1.0);
-    return texelFetch(siteSampler, ivec2(id % 10, id / 10), 0);
-}
-
-ivec3 from2D(ivec2 texCoord) {
-    int sliceX = texCoord.x / VOXEL_DIM;
-    int sliceY = texCoord.y / VOXEL_DIM;
-    int z = sliceY * SLICES_PER_ROW + sliceX;
-    return ivec3(texCoord.x % VOXEL_DIM, texCoord.y % VOXEL_DIM, z);
-}
-
+// Helper functions for voxel grid texture packing
 ivec2 to2D(ivec3 coord3D) {
-    int sliceX = coord3D.z % SLICES_PER_ROW;
-    int sliceY = coord3D.z / SLICES_PER_ROW;
-    return ivec2(sliceX * VOXEL_DIM + coord3D.x, sliceY * VOXEL_DIM + coord3D.y);
+    int slice = coord3D.z;
+    int sliceX = slice % SLICES_PER_ROW;
+    int sliceY = slice / SLICES_PER_ROW;
+    return ivec2(sliceX * VOXEL_DIM + coord3D.x, 
+                 sliceY * VOXEL_DIM + coord3D.y);
 }
 
-vec3 voxelToWorld(ivec3 coord3D) {
-    return (vec3(coord3D) + 0.5) / float(VOXEL_DIM) * 2.0 * CUBE_SIZE - CUBE_SIZE;
+ivec3 from2D(ivec2 coord2D) {
+    int sliceX = coord2D.x / VOXEL_DIM;
+    int sliceY = coord2D.y / VOXEL_DIM;
+    int slice = sliceY * SLICES_PER_ROW + sliceX;
+    return ivec3(coord2D.x % VOXEL_DIM,
+                 coord2D.y % VOXEL_DIM,
+                 slice);
 }
 
+vec3 voxelToWorld(ivec3 voxelCoord) {
+    vec3 normalized = vec3(voxelCoord) / float(VOXEL_DIM - 1);
+    return (normalized - 0.5) * 2.0 * CUBE_SIZE;
+}
+
+vec4 getSiteData(sampler2D siteSampler, int siteId) {
+    int x = siteId % 10;
+    int y = siteId / 10;
+    return texelFetch(siteSampler, ivec2(x, y), 0);
+}
+
+// 4x4 Bayer dithering matrix
 float bayer4x4(vec2 pos) {
     mat4 bayerMatrix = mat4(
         0.0/16.0,  8.0/16.0,  2.0/16.0, 10.0/16.0,
