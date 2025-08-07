@@ -1,5 +1,5 @@
 export const commonShader = `
-#define MAX_SITES 100
+#define MAX_SITES 50000  // Maximum supported
 #define CUBE_SIZE 0.6
 #define AUTO_ROTATE_SPEED 0.5
 
@@ -8,7 +8,7 @@ const int SLICES_PER_ROW = 8;
 
 vec4 getSiteData(sampler2D siteSampler, int id) {
     if (id < 0) return vec4(1e6, 1e6, 1e6, -1.0);
-    return texelFetch(siteSampler, ivec2(id % 10, id / 10), 0);
+    return texelFetch(siteSampler, ivec2(id % 224, id / 224), 0);  // 224x224 for up to 50000 sites
 }
 
 ivec3 from2D(ivec2 texCoord) {

@@ -3,13 +3,13 @@ export const bufferBFragment = `
 uniform sampler2D iChannel0;  // Buffer A (site positions)
 uniform sampler2D iChannel1;  // Previous Buffer B (for persistence)
 uniform float iFrame;
-uniform float numSites;  // Added for dynamic site count
+uniform float activeSites;  // Number of sites actually in use (controlled by slider)
 
 in vec2 vUv;
 out vec4 fragColor;
 
 void updateClosest4(inout ivec4 ids, inout vec4 dists, vec3 p, int newId, sampler2D siteSampler) {
-    if (newId < 0 || newId == ids.x || newId == ids.y || newId == ids.z || newId == ids.w) return;
+    if (newId < 0 || newId >= int(activeSites) || newId == ids.x || newId == ids.y || newId == ids.z || newId == ids.w) return;
     float d = distance(p, getSiteData(siteSampler, newId).xyz);
     if (d < dists.x) {
         dists = vec4(d, dists.xyz);
@@ -48,7 +48,10 @@ void main() {
     ivec4 bestIds = ivec4(-1);
     vec4 bestDists = vec4(1e6);
     
-    for (int i = 0; i < MAX_SITES; i++) {
+    // Only check active sites
+    int numToCheck = int(activeSites);
+    for (int i = 0; i < numToCheck; i++) {
+        if (i >= MAX_SITES) break;  // Safety check
         updateClosest4(bestIds, bestDists, p, i, iChannel0);
     }
     

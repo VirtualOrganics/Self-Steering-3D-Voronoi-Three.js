@@ -6,7 +6,7 @@ uniform float iTime;
 uniform float iFrame;
 uniform float movementSpeed;
 uniform float movementScale;
-uniform float numSites;  // Added for dynamic site count
+uniform float activeSites;  // Number of sites actually in use (controlled by slider)
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -30,8 +30,9 @@ vec3 noise3D_vec(vec3 p) {
 
 void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
-    int siteId = p.y * 10 + p.x;
-    if (siteId >= MAX_SITES) {
+    int siteId = p.y * 224 + p.x;  // 224x224 texture for up to 50000 sites
+    
+    if (siteId >= int(activeSites)) {
         fragColor = vec4(0);
         return;
     }

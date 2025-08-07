@@ -36,8 +36,8 @@ const rtOptions = {
     generateMipmaps: false
 };
 
-// Buffer A: Site positions (10x10 texture for 100 sites)
-const bufferA = new THREE.WebGLRenderTarget(10, 10, rtOptions);
+// Buffer A: Site positions (224x224 texture for up to 50000 sites)
+const bufferA = new THREE.WebGLRenderTarget(224, 224, rtOptions);
 bufferA.texture.needsUpdate = true;
 
 // Buffer B: Voxel grid - we need TWO for ping-ponging to avoid feedback loop
@@ -65,7 +65,7 @@ const bufferAMaterial = new THREE.ShaderMaterial({
         iFrame: { value: 0 },
         movementSpeed: { value: 0.6 },
         movementScale: { value: 0.2 },
-        numSites: { value: 100 }  // Added numSites uniform
+        activeSites: { value: 4000 }  // Default to 4000 sites
     },
     vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferAFragment,
@@ -77,7 +77,7 @@ const bufferBMaterial = new THREE.ShaderMaterial({
         iChannel0: { value: null }, // Buffer A
         iChannel1: { value: null }, // Previous Buffer B
         iFrame: { value: 0 },
-        numSites: { value: 100 }  // Added numSites uniform
+        activeSites: { value: 4000 }  // Default to 4000 sites
     },
     vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferBFragment,
@@ -93,25 +93,24 @@ const mainMaterial = new THREE.ShaderMaterial({
         iTime: { value: 0 },
         iFrame: { value: 0 },
         iMouse: { value: new THREE.Vector4(0, 0, 0, 0) },
-        numSites: { value: 100 },  // Added numSites uniform
         
-        // Control uniforms with Shadertoy defaults
-        cellOpacity: { value: 0.15 },
-        edgeOpacity: { value: 4.0 },
+        // Control uniforms with user-specified defaults
+        cellOpacity: { value: 0.25 },
+        edgeOpacity: { value: 4.3 },
         edgeSharpness: { value: 0.005 },
-        edgeThickness: { value: 0.00785 },
+        edgeThickness: { value: 0.0075 },
         showSitePoints: { value: 1.0 },
-        sitePointSize: { value: 0.0075 },
+        sitePointSize: { value: 0.006 },
         useSmoothEdges: { value: 1.0 },
         useSizeBasedColor: { value: 1.0 },
         useTemporalDither: { value: 1.0 },
-        ditherScale: { value: 4.0 },
+        ditherScale: { value: 1.3 },
         cubeSize: { value: 0.55 },
         autoRotate: { value: 1.0 },
         rotateSpeed: { value: 0.3 },
-        baseColor: { value: new THREE.Vector3(0.224, 0.541, 0.953) },
-        useRandomColors: { value: 1.0 },  // Added for random colors toggle
-        zoom: { value: 2.5 }  // Added for zoom control
+        baseColor: { value: new THREE.Vector3(0.204, 0.380, 0.596) },  // #346198 in RGB
+        useRandomColors: { value: 0.0 },  // Random colors OFF
+        zoom: { value: 3.3 }  // Default zoom 3.3
     },
     vertexShader: mainVertex,
     fragmentShader: commonShader + mainFragment,
@@ -374,17 +373,32 @@ document.getElementById('baseColor').addEventListener('input', (e) => {
     mainMaterial.uniforms.baseColor.value.set(r, g, b);
 });
 
-// Number of Sites control - just update uniform, no buffer resizing yet
+// Number of Sites control
 document.getElementById('numSites').addEventListener('input', (e) => {
     const numSites = parseInt(e.target.value);
-    console.log('Updating numSites uniform to:', numSites);
+    document.getElementById('numSitesValue').textContent = numSites;
+    document.getElementById('numSitesInput').value = numSites;
     
     // Update uniforms
-    bufferAMaterial.uniforms.numSites.value = numSites;
-    bufferBMaterial.uniforms.numSites.value = numSites;
-    mainMaterial.uniforms.numSites.value = numSites;
+    bufferAMaterial.uniforms.activeSites.value = numSites;
+    bufferBMaterial.uniforms.activeSites.value = numSites;
     
-    // Note: NOT resizing buffers yet - this would be the breaking point
+    // Reset frame to trigger buffer update
+    frame = 0;
+});
+
+document.getElementById('numSitesInput').addEventListener('change', (e) => {
+    const numSites = Math.min(50000, Math.max(10, parseInt(e.target.value) || 4000));
+    e.target.value = numSites;
+    document.getElementById('numSites').value = numSites;
+    document.getElementById('numSitesValue').textContent = numSites;
+    
+    // Update uniforms
+    bufferAMaterial.uniforms.activeSites.value = numSites;
+    bufferBMaterial.uniforms.activeSites.value = numSites;
+    
+    // Reset frame to trigger buffer update
+    frame = 0;
 });
 
 // Window resize
@@ -396,7 +410,7 @@ window.addEventListener('resize', () => {
 });
 
 // Animation loop
-let frame = 0;
+let frame = 0;  // Moved to this scope so event listeners can access it
 let frameCount = 0;
 let fpsTime = 0;
 let animationTime = 0;  // Time for animation (affected by pause)

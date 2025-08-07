@@ -17,7 +17,6 @@ uniform vec2 iResolution;
 uniform float iTime;
 uniform float iFrame;
 uniform vec4 iMouse;
-uniform float numSites;  // Added for dynamic site count
 
 // Control uniforms
 uniform float cellOpacity;
