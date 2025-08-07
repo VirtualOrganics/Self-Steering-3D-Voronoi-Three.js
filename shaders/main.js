@@ -23,6 +23,7 @@ uniform float showSitePoints;
 uniform float sitePointSize;
 uniform float useSmoothEdges;
 uniform float useSizeBasedColor;
+uniform float useTemporalDither;
 uniform vec3 baseColor;
 
 in vec2 vUv;
@@ -108,7 +109,18 @@ void main() {
     vec2 fragCoord = gl_FragCoord.xy;
     vec3 backgroundColor = vec3(0.05, 0.05, 0.08);
     
-    float ditherThreshold = bayer4x4(fragCoord);
+    // Get dither threshold with optional temporal rotation
+    float ditherThreshold;
+    if (useTemporalDither > 0.5) {
+        vec2 ditherOffset = vec2(
+            mod(iFrame * 17.0, 64.0),
+            mod(iFrame * 23.0, 64.0)
+        );
+        ditherThreshold = bayer4x4(fragCoord + ditherOffset);
+    } else {
+        ditherThreshold = bayer4x4(fragCoord);
+    }
+    
     float hitDist = edgeSharpness * 0.1;
     
     float angleH = iTime * AUTO_ROTATE_SPEED;

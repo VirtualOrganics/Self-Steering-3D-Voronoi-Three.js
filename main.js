@@ -13,6 +13,9 @@ const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// Orthographic camera for buffer rendering
+const orthoCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
 // Clock for animation
 const clock = new THREE.Clock();
 
@@ -21,7 +24,9 @@ const rtOptions = {
     format: THREE.RGBAFormat,
     type: THREE.FloatType,
     minFilter: THREE.NearestFilter,
-    magFilter: THREE.NearestFilter
+    magFilter: THREE.NearestFilter,
+    wrapS: THREE.ClampToEdgeWrapping,
+    wrapT: THREE.ClampToEdgeWrapping
 };
 
 // Buffer A: Site positions (10x10 texture for 100 sites)
@@ -29,6 +34,15 @@ const bufferA = new THREE.WebGLRenderTarget(10, 10, rtOptions);
 
 // Buffer B: Voxel grid (512x512 for 64^3 voxels)
 const bufferB = new THREE.WebGLRenderTarget(512, 512, rtOptions);
+
+// Simple passthrough vertex shader for buffers
+const bufferVertexShader = `
+out vec2 vUv;
+void main() {
+    vUv = uv;
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+}
+`;
 
 // Materials for each buffer
 const bufferAMaterial = new THREE.ShaderMaterial({
@@ -38,6 +52,7 @@ const bufferAMaterial = new THREE.ShaderMaterial({
         movementSpeed: { value: 0.3 },
         movementScale: { value: 0.25 }
     },
+    vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferAFragment,
     glslVersion: THREE.GLSL3
 });
@@ -48,6 +63,7 @@ const bufferBMaterial = new THREE.ShaderMaterial({
         iChannel1: { value: null }, // Buffer B (itself)
         iFrame: { value: 0 }
     },
+    vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferBFragment,
     glslVersion: THREE.GLSL3
 });
@@ -71,11 +87,14 @@ const mainMaterial = new THREE.ShaderMaterial({
         sitePointSize: { value: 0.01 },
         useSmoothEdges: { value: 1.0 },
         useSizeBasedColor: { value: 0.0 },
+        useTemporalDither: { value: 1.0 },
         baseColor: { value: new THREE.Vector3(0.3, 0.6, 1.0) }
     },
     vertexShader: mainVertex,
     fragmentShader: commonShader + mainFragment,
-    glslVersion: THREE.GLSL3
+    glslVersion: THREE.GLSL3,
+    depthTest: false,
+    depthWrite: false
 });
 
 // Fullscreen quad for rendering
@@ -163,7 +182,7 @@ function animate() {
     bufferAMaterial.uniforms.iFrame.value = frame;
     
     renderer.setRenderTarget(bufferA);
-    renderer.render(bufferAScene, camera);
+    renderer.render(bufferAScene, orthoCamera);
     
     // Update Buffer B (voxel grid)
     bufferBMaterial.uniforms.iChannel0.value = bufferA.texture;
@@ -171,7 +190,7 @@ function animate() {
     bufferBMaterial.uniforms.iFrame.value = frame;
     
     renderer.setRenderTarget(bufferB);
-    renderer.render(bufferBScene, camera);
+    renderer.render(bufferBScene, orthoCamera);
     
     // Main render
     mainMaterial.uniforms.iChannel0.value = bufferA.texture;
@@ -184,5 +203,12 @@ function animate() {
     
     frame++;
 }
+
+// Initialize the textures with a first pass
+renderer.setRenderTarget(bufferA);
+renderer.render(bufferAScene, orthoCamera);
+renderer.setRenderTarget(bufferB);
+renderer.render(bufferBScene, orthoCamera);
+renderer.setRenderTarget(null);
 
 animate(); 
