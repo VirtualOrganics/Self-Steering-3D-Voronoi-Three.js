@@ -40,9 +40,14 @@ const rtOptions = {
 const bufferA = new THREE.WebGLRenderTarget(10, 10, rtOptions);
 bufferA.texture.needsUpdate = true;
 
-// Buffer B: Voxel grid (512x512 for 64^3 voxels)
-const bufferB = new THREE.WebGLRenderTarget(512, 512, rtOptions);
-bufferB.texture.needsUpdate = true;
+// Buffer B: Voxel grid - we need TWO for ping-ponging to avoid feedback loop
+const bufferB1 = new THREE.WebGLRenderTarget(512, 512, rtOptions);
+const bufferB2 = new THREE.WebGLRenderTarget(512, 512, rtOptions);
+bufferB1.texture.needsUpdate = true;
+bufferB2.texture.needsUpdate = true;
+
+// Track which buffer B is current
+let currentBufferB = 0;
 
 // Simple passthrough vertex shader for buffers
 const bufferVertexShader = `
@@ -69,7 +74,7 @@ const bufferAMaterial = new THREE.ShaderMaterial({
 const bufferBMaterial = new THREE.ShaderMaterial({
     uniforms: {
         iChannel0: { value: null }, // Buffer A
-        iChannel1: { value: null }, // Buffer B (itself)
+        iChannel1: { value: null }, // Previous Buffer B
         iFrame: { value: 0 }
     },
     vertexShader: bufferVertexShader,
@@ -268,24 +273,31 @@ function animate() {
     renderer.clear();
     renderer.render(bufferAScene, orthoCamera);
     
-    // Update Buffer B (voxel grid)
+    // Update Buffer B (voxel grid) with ping-pong to avoid feedback loop
+    // Read from one buffer, write to the other
+    const readBuffer = currentBufferB === 0 ? bufferB2 : bufferB1;
+    const writeBuffer = currentBufferB === 0 ? bufferB1 : bufferB2;
+    
     bufferBMaterial.uniforms.iChannel0.value = bufferA.texture;
-    bufferBMaterial.uniforms.iChannel1.value = bufferB.texture;
+    bufferBMaterial.uniforms.iChannel1.value = readBuffer.texture;
     bufferBMaterial.uniforms.iFrame.value = frame;
     
-    renderer.setRenderTarget(bufferB);
+    renderer.setRenderTarget(writeBuffer);
     renderer.clear();
     renderer.render(bufferBScene, orthoCamera);
+    
+    // Swap buffers for next frame
+    currentBufferB = 1 - currentBufferB;
     
     // Debug: Check if buffers have data
     if (frame === 0 || frame === 10) {
         console.log(`Frame ${frame}: BufferA texture:`, bufferA.texture);
-        console.log(`Frame ${frame}: BufferB texture:`, bufferB.texture);
+        console.log(`Frame ${frame}: BufferB texture:`, writeBuffer.texture);
     }
     
-    // Main render
+    // Main render - use the buffer we just wrote to
     mainMaterial.uniforms.iChannel0.value = bufferA.texture;
-    mainMaterial.uniforms.iChannel1.value = bufferB.texture;
+    mainMaterial.uniforms.iChannel1.value = writeBuffer.texture;
     mainMaterial.uniforms.iTime.value = time;
     mainMaterial.uniforms.iFrame.value = frame;
     
@@ -298,11 +310,24 @@ function animate() {
 
 // Initialize buffers before starting animation
 console.log('Initializing buffers...');
+
+// Initialize Buffer A
 renderer.setRenderTarget(bufferA);
 renderer.clear();
 renderer.render(bufferAScene, orthoCamera);
 
-renderer.setRenderTarget(bufferB);
+// Initialize both Buffer B ping-pong targets
+// First render to bufferB1
+bufferBMaterial.uniforms.iChannel0.value = bufferA.texture;
+bufferBMaterial.uniforms.iChannel1.value = bufferB2.texture; // Initially empty
+bufferBMaterial.uniforms.iFrame.value = 0;
+
+renderer.setRenderTarget(bufferB1);
+renderer.clear();
+renderer.render(bufferBScene, orthoCamera);
+
+// Then copy to bufferB2 for consistency
+renderer.setRenderTarget(bufferB2);
 renderer.clear();
 renderer.render(bufferBScene, orthoCamera);
 
