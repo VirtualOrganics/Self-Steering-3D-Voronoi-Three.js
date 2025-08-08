@@ -1,7 +1,31 @@
 export const commonShader = `
 #define MAX_SITES 50000  // Maximum supported
-#define CUBE_SIZE 0.6
-#define AUTO_ROTATE_SPEED 0.5
+#define CUBE_SIZE 0.55
+#define AUTO_ROTATE_SPEED 0.3
+
+// --- PERIODIC BOUNDARY TOGGLE AND HELPERS ---
+#define USE_PERIODIC_BOUNDARIES 0  // Default off, will be controlled by uniform
+
+// Calculates the shortest displacement vector from p2 to p1, accounting for wrapping.
+// This is the replacement for (p1 - p2).
+vec3 periodic_diff(vec3 p1, vec3 p2, float usePeriodicBoundaries, float cubeSize) {
+    vec3 d = p1 - p2;
+    // If periodic boundaries are enabled and any component is more than half the box size, wrap
+    if (usePeriodicBoundaries > 0.5) {
+        vec3 cubeDiameter = vec3(2.0 * cubeSize);
+        return d - cubeDiameter * round(d / cubeDiameter);
+    }
+    return d;
+}
+
+// Calculates the shortest scalar distance between p1 and p2 using the periodic vector.
+// This is the replacement for distance(p1, p2).
+float periodic_dist(vec3 p1, vec3 p2, float usePeriodicBoundaries, float cubeSize) {
+    if (usePeriodicBoundaries > 0.5) {
+        return length(periodic_diff(p1, p2, 1.0, cubeSize));
+    }
+    return distance(p1, p2);
+}
 
 const int VOXEL_DIM = 64;
 const int SLICES_PER_ROW = 8;
@@ -24,8 +48,8 @@ ivec2 to2D(ivec3 coord3D) {
     return ivec2(sliceX * VOXEL_DIM + coord3D.x, sliceY * VOXEL_DIM + coord3D.y);
 }
 
-vec3 voxelToWorld(ivec3 coord3D) {
-    return (vec3(coord3D) + 0.5) / float(VOXEL_DIM) * 2.0 * CUBE_SIZE - CUBE_SIZE;
+vec3 voxelToWorld(ivec3 coord3D, float cubeSize) {
+    return (vec3(coord3D) + 0.5) / float(VOXEL_DIM) * 2.0 * cubeSize - cubeSize;
 }
 
 float bayer4x4(vec2 pos) {

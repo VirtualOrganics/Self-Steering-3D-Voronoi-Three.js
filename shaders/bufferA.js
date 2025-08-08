@@ -1,5 +1,6 @@
 export const bufferAFragment = `
 // Buffer A: Calculate and animate local space site positions
+// Now supports both closed-box and periodic boundary conditions
 precision highp float;
 
 uniform float iTime;
@@ -7,6 +8,8 @@ uniform float iFrame;
 uniform float movementSpeed;
 uniform float movementScale;
 uniform float activeSites;  // Number of sites actually in use (controlled by slider)
+uniform float usePeriodicBoundaries;  // Toggle for periodic boundaries
+uniform float cubeSize;  // Cube size from main uniforms
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -37,47 +40,51 @@ void main() {
         return;
     }
     
-    // Base position for each site
+    // Base position for each site (in [-1, 1] range)
     vec3 basePos = vec3(
         hash33(vec3(float(siteId), 0, 0)).x,
         hash33(vec3(0, float(siteId), 0)).y,
         hash33(vec3(0, 0, float(siteId))).z
     );
     
-    // Scale base position to be within the cube
-    basePos = basePos * 0.8;
-    
-    // Animated movement with speed and scale control
+    // Animated movement - this can push particles beyond boundaries
     vec3 movement = noise3D_vec(basePos * 2.0 + vec3(iTime * movementSpeed));
     vec3 localPos = basePos + movement * movementScale;
     
-    // Soft boundary handling - repel from edges
-    float edgeDist = 0.85;
-    float repelStrength = 2.0;
-    
-    // Apply soft boundaries for each axis
-    if (abs(localPos.x) > edgeDist) {
-        float excess = abs(localPos.x) - edgeDist;
-        float repel = 1.0 - excess * repelStrength;
-        repel = max(repel, 0.0);
-        localPos.x *= repel;
+    if (usePeriodicBoundaries < 0.5) {
+        // --- ORIGINAL SOFT BOUNDARY LOGIC (CLOSED BOX) ---
+        // Scale base position to stay within bounds
+        localPos = basePos * 0.8 + movement * movementScale;
+        
+        float edgeDist = 0.85;
+        float repelStrength = 2.0;
+        
+        if (abs(localPos.x) > edgeDist) {
+            float excess = abs(localPos.x) - edgeDist;
+            localPos.x *= max(0.0, 1.0 - excess * repelStrength);
+        }
+        if (abs(localPos.y) > edgeDist) {
+            float excess = abs(localPos.y) - edgeDist;
+            localPos.y *= max(0.0, 1.0 - excess * repelStrength);
+        }
+        if (abs(localPos.z) > edgeDist) {
+            float excess = abs(localPos.z) - edgeDist;
+            localPos.z *= max(0.0, 1.0 - excess * repelStrength);
+        }
+        
+        localPos = clamp(localPos, -0.95, 0.95);
     }
-    if (abs(localPos.y) > edgeDist) {
-        float excess = abs(localPos.y) - edgeDist;
-        float repel = 1.0 - excess * repelStrength;
-        repel = max(repel, 0.0);
-        localPos.y *= repel;
-    }
-    if (abs(localPos.z) > edgeDist) {
-        float excess = abs(localPos.z) - edgeDist;
-        float repel = 1.0 - excess * repelStrength;
-        repel = max(repel, 0.0);
-        localPos.z *= repel;
+    // For periodic mode, let particles move freely in the full [-1, 1] + movement range
+    
+    // Scale normalized position to world space (CRITICAL FIX from reference)
+    vec3 worldPos = localPos * cubeSize;
+    
+    if (usePeriodicBoundaries > 0.5) {
+        // --- NEW PERIODIC WRAPPING LOGIC ---
+        // This wraps the particle's position around the cube's boundaries
+        worldPos = mod(worldPos + cubeSize, 2.0 * cubeSize) - cubeSize;
     }
     
-    // Final safety clamp
-    localPos = clamp(localPos, -0.95, 0.95);
-    
-    fragColor = vec4(localPos, float(siteId));
+    fragColor = vec4(worldPos, float(siteId));
 }
 `; 

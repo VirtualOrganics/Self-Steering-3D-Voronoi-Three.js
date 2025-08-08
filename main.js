@@ -65,7 +65,9 @@ const bufferAMaterial = new THREE.ShaderMaterial({
         iFrame: { value: 0 },
         movementSpeed: { value: 0.6 },
         movementScale: { value: 0.2 },
-        activeSites: { value: 4000 }  // Default to 4000 sites
+        activeSites: { value: 4000 },  // Default 4000 sites
+        usePeriodicBoundaries: { value: 1.0 },  // Default on
+        cubeSize: { value: 0.55 }  // Match default cube size
     },
     vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferAFragment,
@@ -77,7 +79,9 @@ const bufferBMaterial = new THREE.ShaderMaterial({
         iChannel0: { value: null }, // Buffer A
         iChannel1: { value: null }, // Previous Buffer B
         iFrame: { value: 0 },
-        activeSites: { value: 4000 }  // Default to 4000 sites
+        activeSites: { value: 4000 },  // Default 4000 sites
+        usePeriodicBoundaries: { value: 1.0 },  // Default on
+        cubeSize: { value: 0.55 }  // Match default cube size
     },
     vertexShader: bufferVertexShader,
     fragmentShader: commonShader + bufferBFragment,
@@ -110,7 +114,8 @@ const mainMaterial = new THREE.ShaderMaterial({
         rotateSpeed: { value: 0.3 },
         baseColor: { value: new THREE.Vector3(0.204, 0.380, 0.596) },  // #346198 in RGB
         useRandomColors: { value: 0.0 },  // Random colors OFF
-        zoom: { value: 3.3 }  // Default zoom 3.3
+        zoom: { value: 3.3 },  // Default zoom 3.3
+        usePeriodicBoundaries: { value: 1.0 }  // Default on
     },
     vertexShader: mainVertex,
     fragmentShader: commonShader + mainFragment,
@@ -299,8 +304,13 @@ document.getElementById('zoom').addEventListener('input', (e) => {
 });
 
 document.getElementById('cubeSize').addEventListener('input', (e) => {
-    mainMaterial.uniforms.cubeSize.value = parseFloat(e.target.value);
+    const value = parseFloat(e.target.value);
+    mainMaterial.uniforms.cubeSize.value = value;
+    bufferAMaterial.uniforms.cubeSize.value = value;  // Update Buffer A too
+    bufferBMaterial.uniforms.cubeSize.value = value;  // Update Buffer B too
     document.getElementById('cubeSizeValue').textContent = e.target.value;
+    // Reset frame to trigger buffer update
+    frame = 0;
 });
 
 document.getElementById('cellOpacity').addEventListener('input', (e) => {
@@ -357,6 +367,17 @@ document.getElementById('temporalDither').addEventListener('change', (e) => {
 
 document.getElementById('sizeBasedColor').addEventListener('change', (e) => {
     mainMaterial.uniforms.useSizeBasedColor.value = e.target.checked ? 1.0 : 0.0;
+});
+
+// Periodic boundaries toggle
+document.getElementById('periodicBoundaries').addEventListener('change', (e) => {
+    const value = e.target.checked ? 1.0 : 0.0;
+    mainMaterial.uniforms.usePeriodicBoundaries.value = value;
+    bufferAMaterial.uniforms.usePeriodicBoundaries.value = value;
+    bufferBMaterial.uniforms.usePeriodicBoundaries.value = value;
+    
+    // Reset frame to trigger buffer update
+    frame = 0;
 });
 
 // Random colors toggle

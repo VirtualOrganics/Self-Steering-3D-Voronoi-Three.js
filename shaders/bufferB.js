@@ -1,16 +1,21 @@
 export const bufferBFragment = `
 // Buffer B: Voxel grid acceleration structure using Jump Flooding Algorithm
+// Now uses periodic_dist() when periodic boundaries are enabled
 uniform sampler2D iChannel0;  // Buffer A (site positions)
 uniform sampler2D iChannel1;  // Previous Buffer B (for persistence)
 uniform float iFrame;
 uniform float activeSites;  // Number of sites actually in use (controlled by slider)
+uniform float usePeriodicBoundaries;  // Toggle for periodic boundaries
+uniform float cubeSize;  // Cube size for periodic calculations
 
 in vec2 vUv;
 out vec4 fragColor;
 
 void updateClosest4(inout ivec4 ids, inout vec4 dists, vec3 p, int newId, sampler2D siteSampler) {
     if (newId < 0 || newId >= int(activeSites) || newId == ids.x || newId == ids.y || newId == ids.z || newId == ids.w) return;
-    float d = distance(p, getSiteData(siteSampler, newId).xyz);
+    
+    vec3 sitePos = getSiteData(siteSampler, newId).xyz;
+    float d = periodic_dist(p, sitePos, usePeriodicBoundaries, cubeSize);  // Use periodic distance when enabled
     if (d < dists.x) {
         dists = vec4(d, dists.xyz);
         ids = ivec4(newId, ids.xyz);
@@ -35,7 +40,7 @@ void main() {
     }
 
     ivec3 coord3D = from2D(fragCoord);
-    vec3 p = voxelToWorld(coord3D);
+    vec3 p = voxelToWorld(coord3D, cubeSize);
     
     int updateInterval = 5;
     int frameInt = int(iFrame);

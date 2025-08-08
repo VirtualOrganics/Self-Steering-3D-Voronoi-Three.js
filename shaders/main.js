@@ -35,6 +35,7 @@ uniform float rotateSpeed;
 uniform vec3 baseColor;
 uniform float useRandomColors;  // Added for random colors toggle
 uniform float zoom;  // Added for zoom control
+uniform float usePeriodicBoundaries;  // Toggle for periodic boundaries
 
 in vec2 vUv;
 out vec4 fragColor;
@@ -57,9 +58,9 @@ ivec4 getVoxelData(vec3 p, float cs) {
 }
 
 float getCellSize(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
-    float d2 = distance(p1, p2);
-    float d3 = distance(p1, p3);
-    float d4 = distance(p1, p4);
+    float d2 = periodic_dist(p1, p2, usePeriodicBoundaries, cubeSize);
+    float d3 = periodic_dist(p1, p3, usePeriodicBoundaries, cubeSize);
+    float d4 = periodic_dist(p1, p4, usePeriodicBoundaries, cubeSize);
     float avgDist = (d2 + d3 + d4) / 3.0;
     return clamp((avgDist - 0.1) / 0.4, 0.0, 1.0);
 }
@@ -99,17 +100,17 @@ vec3 idToColor(int id) {
 }
 
 float map(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
-    float d12 = 0.5 * (distance(p, p1) - distance(p, p2));
-    float d13 = 0.5 * (distance(p, p1) - distance(p, p3));
-    float d14 = 0.5 * (distance(p, p1) - distance(p, p4));
+    float d12 = 0.5 * (periodic_dist(p, p1, usePeriodicBoundaries, cubeSize) - periodic_dist(p, p2, usePeriodicBoundaries, cubeSize));
+    float d13 = 0.5 * (periodic_dist(p, p1, usePeriodicBoundaries, cubeSize) - periodic_dist(p, p3, usePeriodicBoundaries, cubeSize));
+    float d14 = 0.5 * (periodic_dist(p, p1, usePeriodicBoundaries, cubeSize) - periodic_dist(p, p4, usePeriodicBoundaries, cubeSize));
     return max(d12, max(d13, d14));
 }
 
 float getEdgeWeight(vec3 p, vec3 p1, vec3 p2, vec3 p3, vec3 p4) {
-    float d1 = distance(p, p1);
-    float d2 = distance(p, p2);
-    float d3 = distance(p, p3);
-    float d4 = distance(p, p4);
+    float d1 = periodic_dist(p, p1, usePeriodicBoundaries, cubeSize);
+    float d2 = periodic_dist(p, p2, usePeriodicBoundaries, cubeSize);
+    float d3 = periodic_dist(p, p3, usePeriodicBoundaries, cubeSize);
+    float d4 = periodic_dist(p, p4, usePeriodicBoundaries, cubeSize);
     
     if (useSmoothEdges > 0.5) {
         float diff12 = abs(d1 - d2);
@@ -231,8 +232,10 @@ void main() {
         p4 *= cubeSize / CUBE_SIZE;
         
         if (showSitePoints > 0.5) {
-            if (distance(p, p1) < sitePointSize || distance(p, p2) < sitePointSize || 
-                distance(p, p3) < sitePointSize || distance(p, p4) < sitePointSize) {
+            if (periodic_dist(p, p1, usePeriodicBoundaries, cubeSize) < sitePointSize || 
+                periodic_dist(p, p2, usePeriodicBoundaries, cubeSize) < sitePointSize || 
+                periodic_dist(p, p3, usePeriodicBoundaries, cubeSize) < sitePointSize || 
+                periodic_dist(p, p4, usePeriodicBoundaries, cubeSize) < sitePointSize) {
                 vec3 siteColor = vec3(1.0);
                 float fog = smoothstep(tFar, tNear, t);
                 fragColor = vec4(mix(backgroundColor, siteColor, fog), 1.0);
