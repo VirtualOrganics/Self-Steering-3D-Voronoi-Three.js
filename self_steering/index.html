@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Self-Steering 3D Voronoi</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #050508; font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    #controls { position: absolute; top:10px; left:10px; background: rgba(0,0,0,0.85); color: #fff; padding: 14px; border-radius: 10px; font-size: 12px; max-width: 360px; max-height: 90vh; overflow-y: auto; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+    .control-group { margin-bottom: 10px; }
+    .control-group label { display:flex; align-items:center; justify-content:space-between; margin-bottom: 4px; color:#ddd; }
+    .value { margin-left: 10px; color:#888; font-weight: bold; }
+    input[type=range] { width:100%; }
+    #toggleButton { position:absolute; top:10px; left:10px; background: rgba(0,0,0,0.85); color:#fff; padding:8px 12px; border-radius:6px; border:1px solid rgba(255,255,255,0.2); cursor:pointer; display:none; }
+    #toggleButton.visible { display:block; }
+    #controls.hidden { transform: translateX(-380px); opacity: 0; transition: transform .3s ease, opacity .3s ease; }
+  </style>
+  <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <div id="toggleButton">☰ Show Controls</div>
+    <div id="controls">
+      <h3 id="hideButton" style="margin:0 0 10px 0; color:#888; cursor:pointer; user-select:none;">Hide</h3>
+      <div class="control-group">
+        <label>Sites <span id="sitesVal" class="value">1200</span></label>
+        <input id="sites" type="range" min="10" max="4000" step="10" value="1200" />
+      </div>
+      <div class="control-group">
+        <label>Cube Size <span id="cubeVal" class="value">0.30</span></label>
+        <input id="cube" type="range" min="0.2" max="1.0" step="0.01" value="0.30" />
+      </div>
+      <div class="control-group">
+        <label><span>Zoom</span><span id="zoomVal" class="value">2.5</span></label>
+        <input id="zoom" type="range" min="1.0" max="5.0" step="0.1" value="2.5" />
+      </div>
+      <div class="control-group">
+        <label><span>Cell Opacity</span><span id="cellOpVal" class="value">0.1</span></label>
+        <input id="cellOp" type="range" min="0.0" max="1.0" step="0.01" value="0.1" />
+      </div>
+      <div class="control-group">
+        <label><span>Edge Opacity</span><span id="edgeOpVal" class="value">2.0</span></label>
+        <input id="edgeOp" type="range" min="0.0" max="4.0" step="0.05" value="2.0" />
+      </div>
+      <div class="control-group">
+        <label><span>Edge Sharpness</span><span id="edgeSharpVal" class="value">0.025</span></label>
+        <input id="edgeSharp" type="range" min="0.001" max="0.05" step="0.001" value="0.025" />
+      </div>
+      <div class="control-group">
+        <label><span>Edge Thickness</span><span id="edgeThickVal" class="value">0.004</span></label>
+        <input id="edgeThick" type="range" min="0.001" max="0.02" step="0.0005" value="0.004" />
+      </div>
+      <div class="control-group">
+        <label><input id="showPoints" type="checkbox" checked /> Show Site Points</label>
+      </div>
+      <div class="control-group">
+        <label><input id="periodic" type="checkbox" /> Periodic Boundaries</label>
+      </div>
+
+      <h4 style="margin:10px 0 6px 0; color:#888;">Physics</h4>
+      <div class="control-group"><label><input id="inv" type="checkbox" checked /> Invert Steering</label></div>
+      <div class="control-group"><label><span>Steering Strength</span><span id="steerVal" class="value">2.50</span></label><input id="steer" type="range" min="0.0" max="5.0" step="0.01" value="2.5" /></div>
+      <div class="control-group"><label><span>Friction</span><span id="fricVal" class="value">0.025</span></label><input id="fric" type="range" min="0.0" max="0.2" step="0.001" value="0.025" /></div>
+      <div class="control-group"><label><span>Min Speed</span><span id="minSpdVal" class="value">0.0004</span></label><input id="minSpd" type="range" min="0.0000" max="0.01" step="0.0001" value="0.0004" /></div>
+      <div class="control-group"><label><span>Max Speed</span><span id="maxSpdVal" class="value">0.0035</span></label><input id="maxSpd" type="range" min="0.0005" max="0.02" step="0.0001" value="0.0035" /></div>
+      <div class="control-group"><label><span>Min Repulsion Radius</span><span id="minRadVal" class="value">0.015</span></label><input id="minRad" type="range" min="0.0" max="0.1" step="0.001" value="0.015" /></div>
+      <div class="control-group"><label><span>Repulsion Strength</span><span id="repVal" class="value">0.015</span></label><input id="rep" type="range" min="0.0" max="0.1" step="0.001" value="0.015" /></div>
+      <div class="control-group"><label><span>Relax Jump Factor</span><span id="moveFVal" class="value">0.0010</span></label><input id="moveF" type="range" min="0.0000" max="0.01" step="0.0001" value="0.0010" /></div>
+
+      <h4 style="margin:10px 0 6px 0; color:#888;">Visual</h4>
+      <div class="control-group"><label class="checkbox-label"><span>Auto Rotate</span><input id="autoRotate" type="checkbox" checked /></label></div>
+      <div class="control-group"><button id="resetRotation" class="small">Reset View</button> <button id="pauseAnimation" class="small">Pause</button></div>
+      <div class="control-group"><label><span>Transparency Dither</span><span id="ditherScaleVal" class="value">2.0</span></label><input id="ditherScale" type="range" min="1.0" max="16.0" step="0.1" value="2.0" /></div>
+      <div class="control-group"><label style="display:flex; align-items:center; justify-content:space-between;"><span>Base Color</span><span id="baseColorValue" style="color:#888;">#346198</span></label><input id="baseColor" type="color" value="#346198" /></div>
+      <div class="control-group"><label><input id="sizeBasedColor" type="checkbox" checked /> Size-Based Tone</label></div>
+    </div>
+    <script>
+      // Panel hide/show (like original)
+      let controlsVisible = true;
+      const controls = document.getElementById('controls');
+      const toggleButton = document.getElementById('toggleButton');
+      document.addEventListener('keydown', (e)=>{
+        if (e.key === 'h' || e.key === 'H') {
+          controlsVisible = !controlsVisible;
+          if (controlsVisible) { controls.classList.remove('hidden'); toggleButton.classList.remove('visible'); }
+          else { controls.classList.add('hidden'); toggleButton.classList.add('visible'); }
+        }
+      });
+      document.getElementById('hideButton').addEventListener('click', ()=>{ controlsVisible=false; controls.classList.add('hidden'); toggleButton.classList.add('visible'); });
+      toggleButton.addEventListener('click', ()=>{ controlsVisible=true; controls.classList.remove('hidden'); toggleButton.classList.remove('visible'); });
+    </script>
+  </body>
+</html>
+
+

@@ -1,10 +1,10 @@
-# 3D Voronoi Voxel GLSL Three.js
+# Self‑Steering 3D Voronoi (Three.js)
 
 A high-performance 3D Voronoi diagram visualization using voxel grid acceleration, implemented in Three.js with GLSL shaders.
 
 ## 🔗 Links
 
-- **[Live Demo](https://virtualorganics.github.io/3D-Voronoi-Voxel-GLSL-Three.js/)**
+- **[Live Demo](https://virtualorganics.github.io/Self-Steering-3D-Voronoi-Three.js/)**
 - **[Original Shadertoy Version](https://www.shadertoy.com/view/tXKSW1)**
 
 ## 📸 Screenshots
@@ -38,7 +38,7 @@ A high-performance 3D Voronoi diagram visualization using voxel grid acceleratio
 
 ```bash
 # Clone the repository
-git clone https://github.com/VirtualOrganics/3D-Voronoi-Voxel-GLSL-Three.js.git
+git clone https://github.com/VirtualOrganics/Self-Steering-3D-Voronoi-Three.js.git
 
 # Install dependencies
 npm install
@@ -46,8 +46,15 @@ npm install
 # Run development server
 npm run dev
 
-# Build for production
-npm run build
+# Build for production (outputs to docs/ for GitHub Pages)
+npm run build -- --config self_steering/vite.config.js
+
+## Deploy to GitHub Pages (main branch)
+
+1. Push your changes to `main` on GitHub.
+2. In GitHub: Settings → Pages → Source: “Deploy from a branch”.
+3. Select Branch: `main`, Folder: `/docs` → Save.
+4. Your site will be available at `https://virtualorganics.github.io/Self-Steering-3D-Voronoi-Three.js/` within a minute.
 ```
 
 ## Technical Details
