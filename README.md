@@ -5,7 +5,7 @@ A high-performance 3D Voronoi diagram visualization using voxel grid acceleratio
 ## 🔗 Links
 
 - **[Live Demo](https://virtualorganics.github.io/Self-Steering-3D-Voronoi-Three.js/)**
-- **[Original Shadertoy Version](https://www.shadertoy.com/view/tXKSW1)**
+- **[Shadertoy reference (self‑steering)](https://www.shadertoy.com/view/WXGSWm)**
 
 ## 📸 Screenshots
 
@@ -14,7 +14,7 @@ A high-performance 3D Voronoi diagram visualization using voxel grid acceleratio
 
 ## Features
 
-- **Dynamic Site Count**: Adjustable from 10 to 50,000 Voronoi sites in real-time
+- **Dynamic Site Count**: Adjustable from 10 to 4,000 Voronoi sites in real-time (default build)
 - **Voxel Grid Acceleration**: Efficient spatial data structure for fast nearest neighbor queries
 - **Jump Flooding Algorithm**: Progressive refinement for accurate Voronoi cell boundaries
 - **Advanced Visual Effects**:
@@ -56,6 +56,30 @@ npm run build -- --config self_steering/vite.config.js
 3. Select Branch: `main`, Folder: `/docs` → Save.
 4. Your site will be available at `https://virtualorganics.github.io/Self-Steering-3D-Voronoi-Three.js/` within a minute.
 ```
+
+## How the self‑steering works
+
+We alternate two simple behaviours per site:
+
+- Relax: briefly untangle overlapping neighbours using local repulsion. We look up the 4 closest neighbour IDs from the voxel grid (Buffer B) and push away with a small jump scaled by local breathing‑room.
+- Steer: move each site along its cell’s main long axis. The axis comes from Buffer C (fast boundary sampling + covariance power‑iteration). We apply steering with friction and min/max speed clamps and add soft repulsion to avoid overlaps.
+
+This produces stable directional flow driven by current cell shapes. All distances scale with cube size relative to a 0.55 baseline, so behaviour stays consistent when you change world scale.
+
+### GPU passes
+
+- Buffer A (Positions): Applies relax/steer to positions with periodic wrapping.
+- Buffer B (Voxel Owners): 3D grid of nearest IDs; updated every N frames with a small jump‑flood refinement.
+- Buffer C (Steering Signal): Samples each cell boundary via short rays to find the longest axis and its direction.
+- Buffer D (State): Smooths the steering vector and manages the relax/steer timing (RELAX_DURATION / STEER_DURATION).
+- Image/Main: Raymarches the Voronoi surface using the 4 nearest IDs from the voxel grid.
+
+### Key UI knobs
+
+- Sites, Cube Size, Steering Strength, Friction, Min/Max Speed
+- Repulsion Radius/Strength, Relax jump factor
+- Show Site Points, Edge Sharpness/Thickness/Opacity
+- Periodic Boundaries toggle, Auto‑Rotate
 
 ## Technical Details
 
