@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Voronoi with Voxel Acceleration</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #050508;
+            touch-action: none;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            max-width: 300px;
+            max-height: 90vh;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            user-select: none;
+        }
+        #controls.hidden {
+            transform: translateX(-320px);
+            opacity: 0;
+        }
+        #controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: #888888;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 8px;
+        }
+        .control-group {
+            margin-bottom: 12px;
+        }
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ddd;
+            font-weight: 500;
+        }
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 3px;
+        }
+        .control-group input[type="checkbox"] {
+            margin-right: 8px;
+        }
+        .control-group input[type="color"] {
+            width: 60px;
+            height: 25px;
+            margin-left: 10px;
+            border: 1px solid #555;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .control-group input[type="number"] {
+            width: 60px;
+            margin-left: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid #555;
+            color: white;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        .value-display {
+            color: #888888;
+            font-weight: bold;
+            float: right;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .sub-option {
+            margin-left: 20px;
+            opacity: 0.9;
+        }
+        button {
+            background: #666666;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-top: 5px;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #777777;
+        }
+        button.small {
+            padding: 4px 10px;
+            margin-left: 10px;
+            font-size: 11px;
+        }
+        #debug {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #888888;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        #toggleButton {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            font-size: 12px;
+            transition: opacity 0.3s ease;
+            display: none;
+        }
+        #toggleButton.visible {
+            display: block;
+        }
+        #toggleButton:hover {
+            background: rgba(0, 0, 0, 0.95);
+        }
+        .section-divider {
+            margin: 15px 0;
+            padding-top: 10px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+  <script type="module" crossorigin src="/Self-Steering-3D-Voronoi-Three.js/assets/index-Cjo1r3xN.js"></script>
+</head>
+<body>
+    <div id="toggleButton">☰ Show Controls</div>
+            <div id="controls">
+            <h3 id="hideButton" style="cursor: pointer; user-select: none;">Hide</h3>
+        
+        <div class="control-group">
+            <label>Number of Sites: <span class="value-display" id="numSitesValue">4000</span></label>
+            <input type="range" id="numSites" min="10" max="50000" step="10" value="4000">
+            <input type="number" id="numSitesInput" min="10" max="50000" value="4000">
+        </div>
+
+        <div class="control-group">
+            <label>Cube Size: <span class="value-display" id="cubeSizeValue">0.55</span></label>
+            <input type="range" id="cubeSize" min="0.3" max="1.0" step="0.01" value="0.55">
+        </div>
+
+        <!-- Rotation/Navigation -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="autoRotate" checked>
+                    Auto Rotate
+                </label>
+                <button id="resetRotation" class="small">Reset View</button>
+                <button id="pauseAnimation" class="small">Pause</button>
+            </div>
+
+            <div class="control-group">
+                <label>Zoom: <span class="value-display" id="zoomValue">3.3</span></label>
+                <input type="range" id="zoom" min="1.0" max="5.0" step="0.1" value="3.3">
+            </div>
+        </div>
+
+        <!-- Color Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Random Colors:
+                    <input type="checkbox" id="randomColors" style="margin-left: 10px;">
+                </label>
+            </div>
+            
+            <div class="control-group">
+                <label style="display: inline;">Base Color:
+                    <input type="color" id="baseColor" value="#346198">
+                    <span id="baseColorValue" style="margin-left: 10px; color: #888;">#346198</span>
+                </label>
+            </div>
+            
+            <div class="control-group sub-option">
+                <label>
+                    <input type="checkbox" id="sizeBasedColor" checked>
+                    Size-Based Tone
+                </label>
+            </div>
+        </div>
+
+        <!-- Visual Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Cell Opacity: <span class="value-display" id="cellOpacityValue">0.25</span></label>
+                <input type="range" id="cellOpacity" min="0.0" max="1.0" step="0.01" value="0.25">
+            </div>
+
+            <div class="control-group">
+                <label>Edge Opacity: <span class="value-display" id="edgeOpacityValue">4.3</span></label>
+                <input type="range" id="edgeOpacity" min="0.0" max="10.0" step="0.1" value="4.3">
+            </div>
+
+            <div class="control-group">
+                <label>Edge Sharpness: <span class="value-display" id="edgeSharpnessValue">0.005</span></label>
+                <input type="range" id="edgeSharpness" min="0.001" max="0.05" step="0.001" value="0.005">
+            </div>
+
+            <div class="control-group">
+                <label>Edge Thickness: <span class="value-display" id="edgeThicknessValue">0.0075</span></label>
+                <input type="range" id="edgeThickness" min="0.001" max="0.02" step="0.00001" value="0.0075">
+            </div>
+
+            <div class="control-group">
+                <label>Transparency Dither: <span class="value-display" id="ditherScaleValue">1.3</span></label>
+                <input type="range" id="ditherScale" min="1.0" max="16.0" step="0.1" value="1.3">
+            </div>
+        </div>
+
+        <!-- Movement Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Movement Speed: <span class="value-display" id="movementSpeedValue">0.6</span></label>
+                <input type="range" id="movementSpeed" min="0.0" max="2.0" step="0.01" value="0.6">
+            </div>
+
+            <div class="control-group">
+                <label>Movement Scale: <span class="value-display" id="movementScaleValue">0.2</span></label>
+                <input type="range" id="movementScale" min="0.0" max="1.0" step="0.01" value="0.2">
+            </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div class="section-divider">
+            <div class="control-group">
+                <label>Site Point Size: <span class="value-display" id="sitePointSizeValue">0.006</span></label>
+                <input type="range" id="sitePointSize" min="0.0" max="0.02" step="0.0001" value="0.006">
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="showSitePoints" checked>
+                    Show Site Points
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="smoothEdges" checked>
+                    Smooth Edges
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="temporalDither" checked>
+                    Temporal Dithering
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="periodicBoundaries" checked>
+                    Periodic Boundaries
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="debug">
+        FPS: <span id="fps">0</span> | Frame: <span id="frameCount">0</span>
+    </div>
+
+    <script>
+        // Toggle controls visibility with H key
+        let controlsVisible = true;
+        const controls = document.getElementById('controls');
+        const toggleButton = document.getElementById('toggleButton');
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'h' || e.key === 'H') {
+                controlsVisible = !controlsVisible;
+                if (controlsVisible) {
+                    controls.classList.remove('hidden');
+                    toggleButton.classList.remove('visible');
+                } else {
+                    controls.classList.add('hidden');
+                    toggleButton.classList.add('visible');
+                }
+            }
+        });
+        
+        // Toggle button functionality
+        toggleButton.addEventListener('click', () => {
+            controlsVisible = true;
+            controls.classList.remove('hidden');
+            toggleButton.classList.remove('visible');
+        });
+
+        // Hide button functionality
+        const hideButton = document.getElementById('hideButton');
+        hideButton.addEventListener('click', () => {
+            controlsVisible = false;
+            controls.classList.add('hidden');
+            toggleButton.classList.add('visible');
+        });
+
+        // Base color display update
+        const baseColorInput = document.getElementById('baseColor');
+        const baseColorValue = document.getElementById('baseColorValue');
+        
+        baseColorInput.addEventListener('input', (e) => {
+            baseColorValue.textContent = e.target.value.toUpperCase();
+        });
+    </script>
+</body>
+</html> 
