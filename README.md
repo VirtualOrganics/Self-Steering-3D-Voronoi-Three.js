@@ -9,8 +9,7 @@ A high-performance 3D Voronoi diagram visualization using voxel grid acceleratio
 
 ## 📸 Screenshots
 
-![3D Voronoi Visualization 1](images/screenshot1.png)
-![3D Voronoi Visualization 2](images/screenshot2.png)
+![Self‑Steering Voronoi Demo](images/steering_demo.png)
 
 ## Features
 
